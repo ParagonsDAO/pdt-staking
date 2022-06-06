@@ -112,6 +112,7 @@ contract Staking {
     /// @param _to      Address that will recieve credit for stake
     /// @param _amount  Amount of PDT to stake
     function stake(address _to, uint256 _amount) external {
+        _setUserMultiplierAtEpoch(msg.sender);
         IERC20(pdt).transferFrom(msg.sender, address(this), _amount);
 
         _adjustMeanMultilpier(true, _amount);
@@ -136,6 +137,7 @@ contract Staking {
     /// @param _to      Address that will recieve PDT unstaked
     /// @param _amount  Amount of PDT to unstake
     function unstake(address _to, uint256 _amount) external {
+        _setUserMultiplierAtEpoch(msg.sender);
         _adjustMeanMultilpier(false, _amount);
 
         totalStaked -= _amount;
@@ -155,7 +157,8 @@ contract Staking {
         stakeDetails[msg.sender] = stakeDetail;
     }
 
-    function claim(address _to, uint256 _id, uint256 _epoch) external {
+    function claim(address _to) external {
+        _setUserMultiplierAtEpoch(msg.sender);
     }
 
     /// VIEW FUNCTIONS ///
@@ -228,13 +231,17 @@ contract Staking {
     function _setUserMultiplierAtEpoch(address _user) internal {
         uint256 _epochLeftOff = epochLeftOff[_user];
 
-        Stake memory stakeDetail = stakeDetails[_user];
+        if(_epochLeftOff == epochId) {
+            Stake memory stakeDetail = stakeDetails[_user];
 
-        for(_epochLeftOff; _epochLeftOff < epochId; ++_epochLeftOff) {
-            Epoch memory _epoch = epoch[_epochLeftOff];
-            uint256 _interactionSinceEpochEnd = _epoch.endTime - stakeDetail.lastInteraction;
-            uint256 _adjustedTime = stakeDetail.adjustedTimeStaked + _interactionSinceEpochEnd;
-            userMultiplierAtEpoch[_user][_epochLeftOff] = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
+            for(_epochLeftOff; _epochLeftOff < epochId; ++_epochLeftOff) {
+                Epoch memory _epoch = epoch[_epochLeftOff];
+                uint256 _interactionSinceEpochEnd = _epoch.endTime - stakeDetail.lastInteraction;
+                uint256 _adjustedTime = stakeDetail.adjustedTimeStaked + _interactionSinceEpochEnd;
+                userMultiplierAtEpoch[_user][_epochLeftOff] = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
+            }
+
+            epochLeftOff[_user] = epochId;
         }
     }
 }
