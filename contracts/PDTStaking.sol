@@ -7,6 +7,8 @@ contract Staking {
     /// ERRORS ///
     error InvalidEpoch();
 
+    error EpochClaimed();
+
     /// STATE VARIABLES ///
 
     /// @notice Starting multiplier
@@ -44,6 +46,8 @@ contract Staking {
     mapping(address => mapping(uint256 => bool)) userClaimedEpoch;
     /// @notice User's multiplier at end of epoch
     mapping(address => mapping(uint256 => uint256)) userMultiplierAtEpoch;
+
+    mapping(address => mapping(uint256 => uint256)) userWeightAtEpoch;
     /// @notice Epoch user has last claimed
     mapping(address => uint256) epochLeftOff;
     /// @notice Id to epoch details
@@ -60,12 +64,14 @@ contract Staking {
     /// @param startTime            Timestamp epoch started
     /// @param endTime              Timestamp epoch ends
     /// @param meanMultiplierAtEnd  Mean multiplier at end of epoch
+    /// @param weightAtEnd          Weight of staked tokens at end of epoch
     struct Epoch {
         uint256 totalToDistirbute;
         uint256 totalClaimed;
         uint256 startTime;
         uint256 endTime;
         uint256 meanMultiplierAtEnd;
+        uint256 weightAtEnd;
     }
 
     /// @notice                    Stake details for user
@@ -96,6 +102,7 @@ contract Staking {
     function distirbute() external {
         if(block.timestamp >= currentEpoch.endTime) {
             epoch[epochId].meanMultiplierAtEnd = meanMultiplier();
+            epoch[epochId].weightAtEnd = meanMultiplier() * totalStaked;
 
             ++epochId;
             Epoch memory _epoch = epoch[epochId];
@@ -157,8 +164,23 @@ contract Staking {
         stakeDetails[msg.sender] = stakeDetail;
     }
 
-    function claim(address _to) external {
+    /// @notice           Claims rewards tokens for msg.sender of `_epochIds`
+    /// @param _to        Address to send rewards to
+    /// @param _epochIds  Array of epoch ids to claim for
+    function claim(address _to, uint256[] calldata _epochIds) external {
         _setUserMultiplierAtEpoch(msg.sender);
+
+        uint256 _pendingRewards;
+
+        for(uint i; i < _epochIds.length; ++i) {
+            if (userClaimedEpoch[msg.sender][_epochIds[i]]) revert EpochClaimed();
+            Epoch memory _epoch = epoch[_epochIds[i]];
+            uint256 _userWeightAtEpoch = userWeightAtEpoch[msg.sender][_epochIds[i]];
+
+            _pendingRewards += _epoch.totalToDistirbute * _userWeightAtEpoch / weightAtEpoch(_epochIds[i]);
+        }
+
+        IERC20(rewardToken).transfer(_to, _pendingRewards);
     }
 
     /// VIEW FUNCTIONS ///
@@ -207,6 +229,11 @@ contract Staking {
             multiplier_ = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
         }
     }
+    
+    function weightAtEpoch(uint256 _epochId) public view returns (uint256) {
+        if (epochId < _epochId) revert InvalidEpoch();
+        return epoch[_epochId].weightAtEnd;
+    }
 
     /// INTERNAL FUNCTIONS ///
 
@@ -238,7 +265,9 @@ contract Staking {
                 Epoch memory _epoch = epoch[_epochLeftOff];
                 uint256 _interactionSinceEpochEnd = _epoch.endTime - stakeDetail.lastInteraction;
                 uint256 _adjustedTime = stakeDetail.adjustedTimeStaked + _interactionSinceEpochEnd;
-                userMultiplierAtEpoch[_user][_epochLeftOff] = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
+                uint256 _multiplier = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
+                userMultiplierAtEpoch[_user][_epochLeftOff] = _multiplier;
+                userWeightAtEpoch[_user][_epochLeftOff] = _multiplier * stakeDetail.amountStaked;
             }
 
             epochLeftOff[_user] = epochId;
