@@ -4,6 +4,9 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract Staking {
 
+    /// ERRORS ///
+    error InvalidEpoch();
+
     /// STATE VARIABLES ///
 
     /// @notice Starting multiplier
@@ -34,6 +37,8 @@ contract Staking {
 
     /// @notice Address of PDT
     address public immutable pdt;
+    /// @notice Address of reward token
+    address public immutable rewardToken;
 
     /// @notice If user has claimed for certain epoch
     mapping(address => mapping(uint256 => bool)) userClaimedEpoch;
@@ -77,10 +82,11 @@ contract Staking {
 
     /// @param _timeToDouble  Time for multiplier to double
     /// @param _pdt           PDT token address
-    constructor(uint256 _timeToDouble, address _pdt) {
+    constructor(uint256 _timeToDouble, address _pdt, address _rewardToken) {
         startTime = block.timestamp;
         timeToDouble = _timeToDouble;
         pdt = _pdt;
+        rewardToken = _rewardToken;
     }
 
     /// PUBLIC FUNCTIONS ///
@@ -181,7 +187,22 @@ contract Staking {
         multiplier_ = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
     }
 
-    function userStakeMultiplierAtEpoch(address _user, uint256 _epochId) external view returns (uint256 multiplier_) {    
+    /// @notice              Returns `multiplier_' of `_user` at `_epochId`
+    /// @param _user         Address of user getting `multiplier_` of `_epochId`
+    /// @param _epochId      Epoch of id to get user for
+    /// @return multiplier_  Multiplier of `_user` at `_epochId`
+    function userStakeMultiplierAtEpoch(address _user, uint256 _epochId) external view returns (uint256 multiplier_) {  
+        if (epochId < _epochId) revert InvalidEpoch();
+        uint256 _epochLeftOff = epochLeftOff[_user];
+        Stake memory stakeDetail = stakeDetails[_user];
+
+        if (_epochLeftOff > _epochId) multiplier_ = userMultiplierAtEpoch[_user][_epochId];
+        else {
+            Epoch memory _epoch = epoch[_epochId];
+            uint256 _interactionSinceEpochEnd = _epoch.endTime - stakeDetail.lastInteraction;
+            uint256 _adjustedTime = stakeDetail.adjustedTimeStaked + _interactionSinceEpochEnd;
+            multiplier_ = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
+        }
     }
 
     /// INTERNAL FUNCTIONS ///
