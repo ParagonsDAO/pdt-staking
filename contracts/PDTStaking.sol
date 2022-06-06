@@ -2,11 +2,16 @@ pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract Staking {
+/// @title   PDT Staking
+/// @notice  Contract that allows users to stake PDT
+/// @author  JeffX 
+contract PDTStaking {
 
     /// ERRORS ///
-    error InvalidEpoch();
 
+    /// @notice Error for if epoch is invalid
+    error InvalidEpoch();
+    /// @notice Error for if user has claimed for epoch
     error EpochClaimed();
 
     /// STATE VARIABLES ///
@@ -46,7 +51,7 @@ contract Staking {
     mapping(address => mapping(uint256 => bool)) userClaimedEpoch;
     /// @notice User's multiplier at end of epoch
     mapping(address => mapping(uint256 => uint256)) userMultiplierAtEpoch;
-
+    /// @notice User's weight at an epoch
     mapping(address => mapping(uint256 => uint256)) userWeightAtEpoch;
     /// @notice Epoch user has last claimed
     mapping(address => uint256) epochLeftOff;
@@ -110,6 +115,9 @@ contract Staking {
             _epoch.totalClaimed = 0;
             _epoch.startTime = block.timestamp;
             _epoch.endTime = block.timestamp + epochLength;
+
+            currentEpoch = _epoch;
+            epoch[epochId] = _epoch;
 
             unclaimedRewards += _epoch.totalToDistirbute;
         }
@@ -230,6 +238,9 @@ contract Staking {
         }
     }
     
+    /// @notice          Returns weight of contract at `_epochId`
+    /// @param _epochId  Id of epoch wanting to get weight for
+    /// @return uint256  Weight of contract for `_epochId`
     function weightAtEpoch(uint256 _epochId) public view returns (uint256) {
         if (epochId < _epochId) revert InvalidEpoch();
         return epoch[_epochId].weightAtEnd;
