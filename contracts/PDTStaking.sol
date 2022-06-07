@@ -4,15 +4,16 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @title   PDT Staking
 /// @notice  Contract that allows users to stake PDT
-/// @author  JeffX 
+/// @author  JeffX
 contract PDTStaking {
-
     /// ERRORS ///
 
     /// @notice Error for if epoch is invalid
     error InvalidEpoch();
     /// @notice Error for if user has claimed for epoch
     error EpochClaimed();
+    /// @notice Error for if there is nothing to claim
+    error NothingToClaim();
 
     /// STATE VARIABLES ///
 
@@ -60,7 +61,6 @@ contract PDTStaking {
     /// @notice Stake details of user
     mapping(address => Stake) public stakeDetails;
 
-
     /// STRUCTS ///
 
     /// @notice                     Details for epoch
@@ -93,7 +93,11 @@ contract PDTStaking {
 
     /// @param _timeToDouble  Time for multiplier to double
     /// @param _pdt           PDT token address
-    constructor(uint256 _timeToDouble, address _pdt, address _rewardToken) {
+    constructor(
+        uint256 _timeToDouble,
+        address _pdt,
+        address _rewardToken
+    ) {
         startTime = block.timestamp;
         timeToDouble = _timeToDouble;
         pdt = _pdt;
@@ -102,16 +106,15 @@ contract PDTStaking {
 
     /// PUBLIC FUNCTIONS ///
 
-
     /// @notice  Update epoch details if time
     function distirbute() external {
-        if(block.timestamp >= currentEpoch.endTime) {
+        if (block.timestamp >= currentEpoch.endTime) {
             epoch[epochId].meanMultiplierAtEnd = meanMultiplier();
             epoch[epochId].weightAtEnd = meanMultiplier() * totalStaked;
 
             ++epochId;
             Epoch memory _epoch = epoch[epochId];
-            _epoch.totalToDistirbute = IERC20(pdt).balanceOf(address(this)) - totalStaked - unclaimedRewards;
+            _epoch.totalToDistirbute = IERC20(rewardToken).balanceOf(address(this)) - unclaimedRewards;
             _epoch.totalClaimed = 0;
             _epoch.startTime = block.timestamp;
             _epoch.endTime = block.timestamp + epochLength;
@@ -131,7 +134,7 @@ contract PDTStaking {
         IERC20(pdt).transferFrom(msg.sender, address(this), _amount);
 
         _adjustMeanMultilpier(true, _amount);
-        
+
         totalStaked += _amount;
 
         Stake memory stakeDetail = stakeDetails[_to];
@@ -139,10 +142,10 @@ contract PDTStaking {
         uint256 previousStakeAmount = stakeDetail.amountStaked;
         uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
 
-        uint256 percentStakeIncreased = 1e18 * _amount / previousStakeAmount;
+        uint256 percentStakeIncreased = (1e18 * _amount) / previousStakeAmount;
 
         stakeDetail.amountStaked += _amount;
-        stakeDetail.adjustedTimeStaked = previousTimeStaked + (percentStakeIncreased * previousTimeStaked / 1e18);
+        stakeDetail.adjustedTimeStaked = previousTimeStaked + ((percentStakeIncreased * previousTimeStaked) / 1e18);
         stakeDetail.lastInteraction = block.timestamp;
 
         stakeDetails[_to] = stakeDetail;
@@ -162,10 +165,10 @@ contract PDTStaking {
         uint256 previousStakeAmount = stakeDetail.amountStaked;
         uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
 
-        uint256 percentStakeDecreased = 1e18 * _amount / previousStakeAmount;
+        uint256 percentStakeDecreased = (1e18 * _amount) / previousStakeAmount;
 
         stakeDetail.amountStaked -= _amount;
-        stakeDetail.adjustedTimeStaked = previousTimeStaked - (percentStakeDecreased * previousTimeStaked / 1e18);
+        stakeDetail.adjustedTimeStaked = previousTimeStaked - ((percentStakeDecreased * previousTimeStaked) / 1e18);
         stakeDetail.lastInteraction = block.timestamp;
 
         IERC20(pdt).transfer(_to, _amount);
@@ -180,25 +183,30 @@ contract PDTStaking {
 
         uint256 _pendingRewards;
 
-        for(uint i; i < _epochIds.length; ++i) {
+        for (uint256 i; i < _epochIds.length; ++i) {
             if (userClaimedEpoch[msg.sender][_epochIds[i]]) revert EpochClaimed();
+            if (epochId <= _epochIds[i]) revert InvalidEpoch();
+
+            userClaimedEpoch[msg.sender][_epochIds[i]] = true;
             Epoch memory _epoch = epoch[_epochIds[i]];
             uint256 _userWeightAtEpoch = userWeightAtEpoch[msg.sender][_epochIds[i]];
-
-            _pendingRewards += _epoch.totalToDistirbute * _userWeightAtEpoch / weightAtEpoch(_epochIds[i]);
+            uint256 _epochRewards = (_epoch.totalToDistirbute * _userWeightAtEpoch) / weightAtEpoch(_epochIds[i]);
+            _pendingRewards += _epochRewards;
+            _epoch.totalClaimed += _epochRewards;
+            epoch[_epochIds[i]] = _epoch;
         }
 
+        unclaimedRewards -= _pendingRewards;
         IERC20(rewardToken).transfer(_to, _pendingRewards);
     }
 
     /// VIEW FUNCTIONS ///
 
-
     /// @notice         Returns multiplier if staked from beginning
     /// @return index_  Multiplier index
     function multipierIndex() public view returns (uint256 index_) {
         uint256 _timePassed = block.timestamp - startTime;
-        index_ = multiplierStart + (multiplierStart * _timePassed / timeToDouble);
+        index_ = multiplierStart + ((multiplierStart * _timePassed) / timeToDouble);
     }
 
     /// @notice              Returns contracts mean multiplier
@@ -206,7 +214,7 @@ contract PDTStaking {
     function meanMultiplier() public view returns (uint256 multiplier_) {
         uint256 _timePassed = block.timestamp - timeSinceLastInteraction;
         uint256 _adjustedTime = adjustedTime + _timePassed;
-        multiplier_ = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
+        multiplier_ = multiplierStart + ((multiplierStart * _adjustedTime) / timeToDouble);
     }
 
     /// @notice              Returns `multiplier_' of `_user`
@@ -217,15 +225,15 @@ contract PDTStaking {
         uint256 _timeSinceLastInteraction = block.timestamp - stakeDetail.lastInteraction;
         uint256 _adjustedTime = stakeDetail.adjustedTimeStaked + _timeSinceLastInteraction;
 
-        multiplier_ = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
+        multiplier_ = multiplierStart + ((multiplierStart * _adjustedTime) / timeToDouble);
     }
 
     /// @notice              Returns `multiplier_' of `_user` at `_epochId`
     /// @param _user         Address of user getting `multiplier_` of `_epochId`
     /// @param _epochId      Epoch of id to get user for
     /// @return multiplier_  Multiplier of `_user` at `_epochId`
-    function userStakeMultiplierAtEpoch(address _user, uint256 _epochId) external view returns (uint256 multiplier_) {  
-        if (epochId < _epochId) revert InvalidEpoch();
+    function userStakeMultiplierAtEpoch(address _user, uint256 _epochId) external view returns (uint256 multiplier_) {
+        if (epochId <= _epochId) revert InvalidEpoch();
         uint256 _epochLeftOff = epochLeftOff[_user];
         Stake memory stakeDetail = stakeDetails[_user];
 
@@ -234,15 +242,15 @@ contract PDTStaking {
             Epoch memory _epoch = epoch[_epochId];
             uint256 _interactionSinceEpochEnd = _epoch.endTime - stakeDetail.lastInteraction;
             uint256 _adjustedTime = stakeDetail.adjustedTimeStaked + _interactionSinceEpochEnd;
-            multiplier_ = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
+            multiplier_ = multiplierStart + ((multiplierStart * _adjustedTime) / timeToDouble);
         }
     }
-    
+
     /// @notice          Returns weight of contract at `_epochId`
     /// @param _epochId  Id of epoch wanting to get weight for
     /// @return uint256  Weight of contract for `_epochId`
     function weightAtEpoch(uint256 _epochId) public view returns (uint256) {
-        if (epochId < _epochId) revert InvalidEpoch();
+        if (epochId <= _epochId) revert InvalidEpoch();
         return epoch[_epochId].weightAtEnd;
     }
 
@@ -255,12 +263,12 @@ contract PDTStaking {
         uint256 previousTotalStaked = totalStaked;
         uint256 previousTimeStaked = adjustedTime;
 
-        uint256 percent = 1e18 * _amount / previousTotalStaked;
+        uint256 percent = (1e18 * _amount) / previousTotalStaked;
 
-        if(_stake) {
-            adjustedTime = previousTimeStaked + (percent * previousTimeStaked / 1e18);
+        if (_stake) {
+            adjustedTime = previousTimeStaked + ((percent * previousTimeStaked) / 1e18);
         } else {
-            adjustedTime = previousTimeStaked - (percent * previousTimeStaked / 1e18);
+            adjustedTime = previousTimeStaked - ((percent * previousTimeStaked) / 1e18);
         }
     }
 
@@ -269,14 +277,14 @@ contract PDTStaking {
     function _setUserMultiplierAtEpoch(address _user) internal {
         uint256 _epochLeftOff = epochLeftOff[_user];
 
-        if(_epochLeftOff == epochId) {
+        if (_epochLeftOff != epochId) {
             Stake memory stakeDetail = stakeDetails[_user];
 
-            for(_epochLeftOff; _epochLeftOff < epochId; ++_epochLeftOff) {
+            for (_epochLeftOff; _epochLeftOff < epochId; ++_epochLeftOff) {
                 Epoch memory _epoch = epoch[_epochLeftOff];
                 uint256 _interactionSinceEpochEnd = _epoch.endTime - stakeDetail.lastInteraction;
                 uint256 _adjustedTime = stakeDetail.adjustedTimeStaked + _interactionSinceEpochEnd;
-                uint256 _multiplier = multiplierStart + (multiplierStart * _adjustedTime / timeToDouble);
+                uint256 _multiplier = multiplierStart + ((multiplierStart * _adjustedTime) / timeToDouble);
                 userMultiplierAtEpoch[_user][_epochLeftOff] = _multiplier;
                 userWeightAtEpoch[_user][_epochLeftOff] = _multiplier * stakeDetail.amountStaked;
             }
