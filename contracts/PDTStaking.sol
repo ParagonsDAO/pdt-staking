@@ -20,7 +20,7 @@ contract PDTStaking {
     /// @notice Starting multiplier
     uint256 public constant multiplierStart = 1e18;
     /// @notice Length of epoch
-    uint256 public epochLength;
+    uint256 public immutable epochLength;
 
     /// @notice Timestmap contract was deplpoyed
     uint256 public immutable startTime;
@@ -92,14 +92,18 @@ contract PDTStaking {
     /// CONSTRUCTOR ///
 
     /// @param _timeToDouble  Time for multiplier to double
+    /// @param _epochLength   Length of epoch
     /// @param _pdt           PDT token address
+    /// @param _rewardToken   Address of reward token
     constructor(
         uint256 _timeToDouble,
+        uint256 _epochLength,
         address _pdt,
         address _rewardToken
     ) {
         startTime = block.timestamp;
         timeToDouble = _timeToDouble;
+        epochLength = _epochLength;
         pdt = _pdt;
         rewardToken = _rewardToken;
     }
