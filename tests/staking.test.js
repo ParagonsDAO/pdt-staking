@@ -63,4 +63,29 @@ describe('Brand Token', () => {
         });
     });
 
+    describe('stake()', () => {
+        it('should stake', async () => {
+            console.log(await staking.meanMultiplier());
+            console.log(await staking.multiplierIndex());
+            await staking.stake(deployer.address, ONE_THOUSAND);
+            console.log(await staking.meanMultiplier());
+            console.log(await staking.multiplierIndex());
+
+            await network.provider.send("evm_increaseTime", [2592000]);
+            await network.provider.send("evm_mine");
+
+            console.log(await staking.meanMultiplier());
+            console.log(await staking.multiplierIndex());
+
+            console.log(await staking.adjustedTime());
+
+            await staking.stake(deployer.address, FIVE_THOUSAND);
+
+            console.log(await staking.adjustedTime());
+            console.log(await staking.timestamp());
+            console.log(await staking.meanMultiplier());
+            console.log(await staking.multiplierIndex());
+        });
+    });
+
 });

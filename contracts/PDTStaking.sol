@@ -28,12 +28,12 @@ contract PDTStaking {
     uint256 public immutable timeToDouble;
 
     /// @notice Adjusted time for contract
-    uint256 private adjustedTime;
+    uint256 public adjustedTime;
 
     /// @notice Total amount of PDT staked
     uint256 public totalStaked;
     /// @notice Last interaction with contract
-    uint256 private timeSinceLastInteraction;
+    uint256 private lastInteraction;
     /// @notice Amount of unclaimed rewards
     uint256 private unclaimedRewards;
 
@@ -100,8 +100,11 @@ contract PDTStaking {
         uint256 _epochLength,
         address _pdt,
         address _rewardToken
+
     ) {
         startTime = block.timestamp;
+        lastInteraction = block.timestamp;
+        adjustedTime = block.timestamp;
         timeToDouble = _timeToDouble;
         epochLength = _epochLength;
         pdt = _pdt;
@@ -117,7 +120,7 @@ contract PDTStaking {
             epoch[epochId].weightAtEnd = meanMultiplier() * totalStaked;
 
             ++epochId;
-            Epoch memory _epoch = epoch[epochId];
+            Epoch memory _epoch;
             _epoch.totalToDistirbute = IERC20(rewardToken).balanceOf(address(this)) - unclaimedRewards;
             _epoch.totalClaimed = 0;
             _epoch.startTime = block.timestamp;
@@ -144,12 +147,16 @@ contract PDTStaking {
         Stake memory stakeDetail = stakeDetails[_to];
 
         uint256 previousStakeAmount = stakeDetail.amountStaked;
-        uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
 
-        uint256 percentStakeIncreased = (1e18 * _amount) / previousStakeAmount;
+        if (previousStakeAmount > 0) {
+            uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
+            uint256 percentStakeIncreased = (1e18 * _amount) / previousStakeAmount;
+            stakeDetail.adjustedTimeStaked = previousTimeStaked + ((percentStakeIncreased * previousTimeStaked) / 1e18);
+        } else {
+            stakeDetail.adjustedTimeStaked = block.timestamp;
+        }
 
         stakeDetail.amountStaked += _amount;
-        stakeDetail.adjustedTimeStaked = previousTimeStaked + ((percentStakeIncreased * previousTimeStaked) / 1e18);
         stakeDetail.lastInteraction = block.timestamp;
 
         stakeDetails[_to] = stakeDetail;
@@ -208,7 +215,7 @@ contract PDTStaking {
 
     /// @notice         Returns multiplier if staked from beginning
     /// @return index_  Multiplier index
-    function multipierIndex() public view returns (uint256 index_) {
+    function multiplierIndex() public view returns (uint256 index_) {
         uint256 _timePassed = block.timestamp - startTime;
         index_ = multiplierStart + ((multiplierStart * _timePassed) / timeToDouble);
     }
@@ -216,9 +223,8 @@ contract PDTStaking {
     /// @notice              Returns contracts mean multiplier
     /// @return multiplier_  Current mean multiplier of contract
     function meanMultiplier() public view returns (uint256 multiplier_) {
-        uint256 _timePassed = block.timestamp - timeSinceLastInteraction;
-        uint256 _adjustedTime = adjustedTime + _timePassed;
-        multiplier_ = multiplierStart + ((multiplierStart * _adjustedTime) / timeToDouble);
+        uint256 _adjustedTimePassed = block.timestamp - adjustedTime;
+        multiplier_ = multiplierStart + ((multiplierStart * _adjustedTimePassed) / timeToDouble);
     }
 
     /// @notice              Returns `multiplier_' of `_user`
@@ -267,12 +273,16 @@ contract PDTStaking {
         uint256 previousTotalStaked = totalStaked;
         uint256 previousTimeStaked = adjustedTime;
 
-        uint256 percent = (1e18 * _amount) / previousTotalStaked;
+        uint256 timePassed = block.timestamp - previousTimeStaked;
 
-        if (_stake) {
-            adjustedTime = previousTimeStaked + ((percent * previousTimeStaked) / 1e18);
-        } else {
-            adjustedTime = previousTimeStaked - ((percent * previousTimeStaked) / 1e18);
+        uint256 percent;
+
+        if (_stake && previousTotalStaked > 0) {
+            percent = (1e18 * _amount) / (previousTotalStaked + _amount);
+            adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
+        } //else adjustedTime = block.timestamp;
+        if (!_stake) {
+            adjustedTime = previousTimeStaked - ((timePassed * percent) / 1e18);
         }
     }
 
@@ -295,5 +305,9 @@ contract PDTStaking {
 
             epochLeftOff[_user] = epochId;
         }
+    }
+
+    function timestamp() external view returns (uint256) {
+        return block.timestamp;
     }
 }
