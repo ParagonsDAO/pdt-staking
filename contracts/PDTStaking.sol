@@ -1,6 +1,7 @@
 pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "hardhat/console.sol";
 
 /// @title   PDT Staking
 /// @notice  Contract that allows users to stake PDT
@@ -105,6 +106,7 @@ contract PDTStaking {
         startTime = block.timestamp;
         lastInteraction = block.timestamp;
         adjustedTime = block.timestamp;
+        currentEpoch.endTime = block.timestamp;
         timeToDouble = _timeToDouble;
         epochLength = _epochLength;
         pdt = _pdt;
@@ -116,8 +118,13 @@ contract PDTStaking {
     /// @notice  Update epoch details if time
     function distirbute() public {
         if (block.timestamp >= currentEpoch.endTime) {
-            epoch[epochId].meanMultiplierAtEnd = meanMultiplier();
-            epoch[epochId].weightAtEnd = meanMultiplier() * totalStaked;
+            uint256 _adjustedTimePassed;
+            unchecked {
+               _adjustedTimePassed = currentEpoch.endTime - adjustedTime; 
+            }
+            uint256 multiplier_ = multiplierStart + ((multiplierStart * _adjustedTimePassed) / timeToDouble);
+            epoch[epochId].meanMultiplierAtEnd = multiplier_;
+            epoch[epochId].weightAtEnd = multiplier_ * totalStaked;
 
             ++epochId;
             Epoch memory _epoch;
@@ -226,6 +233,11 @@ contract PDTStaking {
     /// @return multiplier_  Current mean multiplier of contract
     function meanMultiplier() public view returns (uint256 multiplier_) {
         uint256 _adjustedTimePassed = block.timestamp - adjustedTime;
+        multiplier_ = multiplierStart + ((multiplierStart * _adjustedTimePassed) / timeToDouble);
+    }
+
+    function _meanMultiplier(uint256 _timeStamp, uint256 _adjustedTime) public view returns (uint256 multiplier_) {
+        uint256 _adjustedTimePassed = _timeStamp - _adjustedTime;
         multiplier_ = multiplierStart + ((multiplierStart * _adjustedTimePassed) / timeToDouble);
     }
 

@@ -76,7 +76,6 @@ describe('Brand Token', () => {
 
             expect(epoch[0]).to.equal(FIVE_THOUSAND);
             expect(epoch[1]).to.equal('0');
-            expect(epoch[3] - epoch[2]).to.equal(86400);
             expect(epoch[4]).to.equal('0');
             expect(epoch[5]).to.equal('0');
         });
@@ -154,8 +153,38 @@ describe('Brand Token', () => {
     describe('claim()', () => {
         it('should claim', async () => {
             await payout.transfer(staking.address, FIVE_THOUSAND);
+            await staking.distirbute();
 
             await staking.stake(user.address, ONE_THOUSAND);
+
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
+
+            await staking.distirbute();
+
+            await staking.connect(user).claim(user.address, ['1'])
+        });
+
+        it('should claim with multiple addresses claiming', async () => {
+            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await staking.distirbute();
+
+            await staking.stake(user.address, ONE_THOUSAND);
+            await staking.stake(deployer.address, ONE_THOUSAND);
+
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+
+            await staking.distirbute();
+
+            await staking.connect(user).claim(user.address, ['1'])
+            await staking.connect(deployer).claim(deployer.address, ['1'])
+
+            let epoch1After = await staking.epoch('1');
+
+
+            console.log(epoch1After);
+
         });
     });
 
