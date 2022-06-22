@@ -126,13 +126,8 @@ contract PDTStaking {
             ++epochId;
             Epoch memory _epoch;
             _epoch.totalToDistirbute = IERC20(rewardToken).balanceOf(address(this)) - unclaimedRewards;
-            if (epochId == 1) {
-                _epoch.startTime = block.timestamp;
-                _epoch.endTime = block.timestamp + epochLength;
-            } else {
-                _epoch.startTime = currentEpoch.endTime;
-                _epoch.endTime = currentEpoch.endTime + epochLength;
-            }
+            _epoch.startTime = block.timestamp;
+            _epoch.endTime = block.timestamp + epochLength;
 
             currentEpoch = _epoch;
             epoch[epochId] = _epoch;
@@ -167,6 +162,7 @@ contract PDTStaking {
 
         stakeDetail.amountStaked += _amount;
         stakeDetail.lastInteraction = block.timestamp;
+        lastInteraction = block.timestamp;
 
         stakeDetails[_to] = stakeDetail;
     }
@@ -191,6 +187,7 @@ contract PDTStaking {
         stakeDetail.amountStaked -= _amount;
         stakeDetail.adjustedTimeStaked = previousTimeStaked - ((percentStakeDecreased * previousTimeStaked) / 1e18);
         stakeDetail.lastInteraction = block.timestamp;
+        lastInteraction = block.timestamp;
 
         IERC20(pdt).transfer(_to, _amount);
         stakeDetails[msg.sender] = stakeDetail;

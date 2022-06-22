@@ -3,7 +3,7 @@ const { ethers } = require("hardhat");
 const { expect } = require("chai");
 
 
-describe('Brand Token', () => {
+describe('PDT Staking', () => {
 
     const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
     const TEN_MILLION = "10000000000000000000000000";
@@ -110,28 +110,15 @@ describe('Brand Token', () => {
 
     describe('stake()', () => {
         it('should stake', async () => {
-            console.log(await staking.meanMultiplier());
-            console.log(await staking.multiplierIndex());
             await staking.stake(deployer.address, ONE_THOUSAND);
-            console.log(await staking.meanMultiplier());
-            console.log(await staking.multiplierIndex());
 
             await network.provider.send("evm_increaseTime", [5184010]);
             await network.provider.send("evm_mine");
 
-            console.log(await staking.meanMultiplier());
-            console.log(await staking.multiplierIndex());
-
             await staking.stake(deployer.address, ONE_THOUSAND);
             await staking.stake(deployer.address, ONE_THOUSAND);
 
-            console.log(await staking.meanMultiplier());
-            console.log(await staking.multiplierIndex());
-
-            await staking.unstake(deployer.address, ONE_THOUSAND);
-
-            console.log(await staking.meanMultiplier());
-            console.log(await staking.multiplierIndex())
+           await staking.unstake(deployer.address, ONE_THOUSAND);
         });
     });
 
@@ -152,7 +139,11 @@ describe('Brand Token', () => {
     });
 
     describe('claim()', () => {
-        it('should claim', async () => {
+        it('should NOT allow claim for invalid epoch', async () => {
+            await expect(staking.connect(user).claim(user.address, ['1'])).to.be.revertedWith("InvalidEpoch()");
+        });
+
+        it('should NOT allow claim for epoch already claimed', async () => {
             await payout.transfer(staking.address, FIVE_THOUSAND);
             await staking.distirbute();
 
@@ -164,6 +155,29 @@ describe('Brand Token', () => {
             await staking.distirbute();
 
             await staking.connect(user).claim(user.address, ['1'])
+            await expect(staking.connect(user).claim(user.address, ['1'])).to.be.revertedWith("EpochClaimed()");
+        });
+
+        it('should claim', async () => {
+            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await staking.distirbute();
+
+            await staking.stake(user.address, ONE_THOUSAND);
+
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
+
+            await staking.distirbute();
+
+            let epoch1Before = await staking.epoch('1');
+
+            console.log(epoch1Before);
+
+            await staking.connect(user).claim(user.address, ['1'])
+
+            let epoch1After = await staking.epoch('1');
+
+            console.log(epoch1After);
         });
 
         it('should claim with multiple addresses claiming', async () => {
@@ -171,20 +185,30 @@ describe('Brand Token', () => {
             await staking.distirbute();
 
             await staking.stake(user.address, ONE_THOUSAND);
+
+            await network.provider.send("evm_increaseTime", [2592000]);
+            await network.provider.send("evm_mine");
+
+            await payout.transfer(staking.address, TWO_THOUSAND);
+
             await staking.stake(deployer.address, ONE_THOUSAND);
 
-            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_increaseTime", [89410]);
             await network.provider.send("evm_mine");
 
             await staking.distirbute();
 
-            await staking.connect(user).claim(user.address, ['1'])
-            await staking.connect(deployer).claim(deployer.address, ['1'])
+            // await staking.connect(user).claim(user.address, ['1'])
+            // await staking.connect(deployer).claim(deployer.address, ['1'])
 
-            let epoch1After = await staking.epoch('1');
+            // await staking.connect(user).claim(user.address, ['2'])
+           await staking.connect(deployer).claim(deployer.address, ['2'])
+        
+        // let epoch1After = await staking.epoch('1');
+        //     console.log(epoch1After);
 
-
-            console.log(epoch1After);
+           let epoch2After = await staking.epoch('2');
+            console.log(epoch2After);
 
         });
     });
