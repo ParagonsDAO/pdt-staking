@@ -209,6 +209,9 @@ contract PDTStaking {
             Epoch memory _epoch = epoch[_epochIds[i]];
             uint256 _userWeightAtEpoch = userWeightAtEpoch[msg.sender][_epochIds[i]];
             uint256 _epochRewards = (_epoch.totalToDistirbute * _userWeightAtEpoch) / weightAtEpoch(_epochIds[i]);
+            if (_epoch.totalClaimed + _epochRewards > _epoch.totalToDistirbute) {
+                _epochRewards = _epoch.totalToDistirbute - _epoch.totalClaimed;
+            }
             _pendingRewards += _epochRewards;
             _epoch.totalClaimed += _epochRewards;
             epoch[_epochIds[i]] = _epoch;
