@@ -109,6 +109,10 @@ describe('PDT Staking', () => {
     });
 
     describe('stake()', () => {
+        it('should NOT stake if trying to stake more than balance', async () => {
+            await expect(staking.connect(user2).stake(user2.address, TWO_THOUSAND)).to.be.revertedWith("MoreThanBalance()");
+        });
+
         it('should stake', async () => {
             await staking.stake(deployer.address, ONE_THOUSAND);
 
@@ -135,6 +139,13 @@ describe('PDT Staking', () => {
             let stakeDetailsAfter = await staking.stakeDetails(deployer.address);
 
             expect(stakeDetailsAfter[0]).to.equal('0');
+        });
+
+        it('should NOT unstake if more than deposited', async () => {
+            await staking.stake(deployer.address, ONE_THOUSAND);
+            await staking.stake(user.address, ONE_THOUSAND);
+
+            await expect(staking.unstake(deployer.address, TWO_THOUSAND)).to.be.revertedWith("MoreThanStaked()");
         });
     });
 
@@ -205,10 +216,12 @@ describe('PDT Staking', () => {
            await staking.connect(deployer).claim(deployer.address, ['2'])
         
         let epoch1After = await staking.epoch('1');
-            console.log(epoch1After);
+        console.log(epoch1After);
 
-           let epoch2After = await staking.epoch('2');
-            console.log(epoch2After);
+        let epoch2After = await staking.epoch('2');
+        console.log(epoch2After);
+
+        console.log(await staking.userStakeMultiplier(user2.address))
 
         });
     });
