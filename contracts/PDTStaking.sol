@@ -118,10 +118,7 @@ contract PDTStaking {
     /// @notice  Update epoch details if time
     function distirbute() public {
         if (block.timestamp >= currentEpoch.endTime) {
-            uint256 _adjustedTimePassed;
-            unchecked {
-               _adjustedTimePassed = currentEpoch.endTime - adjustedTime; 
-            }
+            uint256 _adjustedTimePassed = currentEpoch.endTime - adjustedTime; 
             uint256 multiplier_ = multiplierStart + ((multiplierStart * _adjustedTimePassed) / timeToDouble);
             epoch[epochId].meanMultiplierAtEnd = multiplier_;
             epoch[epochId].weightAtEnd = multiplier_ * totalStaked;
@@ -129,9 +126,13 @@ contract PDTStaking {
             ++epochId;
             Epoch memory _epoch;
             _epoch.totalToDistirbute = IERC20(rewardToken).balanceOf(address(this)) - unclaimedRewards;
-            _epoch.totalClaimed = 0;
-            _epoch.startTime = block.timestamp;
-            _epoch.endTime = block.timestamp + epochLength;
+            if (epochId == 1) {
+                _epoch.startTime = block.timestamp;
+                _epoch.endTime = block.timestamp + epochLength;
+            } else {
+                _epoch.startTime = currentEpoch.endTime;
+                _epoch.endTime = currentEpoch.endTime + epochLength;
+            }
 
             currentEpoch = _epoch;
             epoch[epochId] = _epoch;

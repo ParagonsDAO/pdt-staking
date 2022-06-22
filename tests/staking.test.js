@@ -123,6 +123,7 @@ describe('Brand Token', () => {
             console.log(await staking.multiplierIndex());
 
             await staking.stake(deployer.address, ONE_THOUSAND);
+            await staking.stake(deployer.address, ONE_THOUSAND);
 
             console.log(await staking.meanMultiplier());
             console.log(await staking.multiplierIndex());
