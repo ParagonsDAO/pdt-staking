@@ -159,7 +159,7 @@ contract PDTStaking {
         if (previousStakeAmount > 0) {
             uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
             uint256 percentStakeIncreased = (1e18 * _amount) / (previousStakeAmount + _amount);
-            stakeDetail.adjustedTimeStaked = previousTimeStaked + ((percentStakeIncreased * previousTimeStaked) / 1e18);
+            stakeDetail.adjustedTimeStaked = previousTimeStaked + ((percentStakeIncreased * (block.timestamp - previousTimeStaked)) / 1e18);
         } else {
             stakeDetail.adjustedTimeStaked = block.timestamp;
         }
@@ -187,10 +187,14 @@ contract PDTStaking {
         uint256 previousStakeAmount = stakeDetail.amountStaked;
         uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
 
-        uint256 percentStakeDecreased = (1e18 * _amount) / previousStakeAmount;
+        uint256 percentStakeDecreased = (1e18 * _amount) / previousStakeAmount / 1e18;
+        console.log("DECREASE %: %s", percentStakeDecreased);
 
         stakeDetail.amountStaked -= _amount;
-        stakeDetail.adjustedTimeStaked = previousTimeStaked - ((percentStakeDecreased * previousTimeStaked) / 1e18);
+        console.log("TIMESTAMP: %s", block.timestamp);
+        console.log("PREV STAKE: %s", previousTimeStaked);
+        console.log("DIFFERECE: %s", block.timestamp - previousTimeStaked);
+        stakeDetail.adjustedTimeStaked = previousTimeStaked - ((percentStakeDecreased * (block.timestamp - previousTimeStaked)));
         stakeDetail.lastInteraction = block.timestamp;
         lastInteraction = block.timestamp;
 
