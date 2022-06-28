@@ -41,11 +41,9 @@ contract PDTStaking {
     /// @notice                    Stake details for user
     /// @param amountStaked        Amount user has staked
     /// @param adjustedTimeStaked  Adjusted time user staked
-    /// @param lastInteraction     Timestamp last interacted
     struct Stake {
         uint256 amountStaked;
         uint256 adjustedTimeStaked;
-        uint256 lastInteraction;
     }
 
     /// STATE VARIABLES ///
@@ -65,8 +63,6 @@ contract PDTStaking {
 
     /// @notice Total amount of PDT staked
     uint256 public totalStaked;
-    /// @notice Last interaction with contract
-    uint256 private lastInteraction;
     /// @notice Amount of unclaimed rewards
     uint256 private unclaimedRewards;
 
@@ -108,7 +104,6 @@ contract PDTStaking {
 
     ) {
         startTime = block.timestamp;
-        lastInteraction = block.timestamp;
         adjustedTime = block.timestamp;
         currentEpoch.endTime = block.timestamp;
         timeToDouble = _timeToDouble;
@@ -124,6 +119,7 @@ contract PDTStaking {
         if (block.timestamp >= currentEpoch.endTime) {
             uint256 multiplier_ = _multiplier(currentEpoch.endTime, adjustedTime);
             epoch[epochId].meanMultiplierAtEnd = multiplier_;
+            console.log("TOTAL STAKED: %s", totalStaked);
             epoch[epochId].weightAtEnd = multiplier_ * totalStaked;
 
             ++epochId;
@@ -158,15 +154,14 @@ contract PDTStaking {
 
         if (previousStakeAmount > 0) {
             uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
+            uint256 timePassed = block.timestamp - previousTimeStaked;
             uint256 percentStakeIncreased = (1e18 * _amount) / (previousStakeAmount + _amount);
-            stakeDetail.adjustedTimeStaked = previousTimeStaked + ((percentStakeIncreased * (block.timestamp - previousTimeStaked)) / 1e18);
+            stakeDetail.adjustedTimeStaked = previousTimeStaked + ((percentStakeIncreased * timePassed) / 1e18);
         } else {
             stakeDetail.adjustedTimeStaked = block.timestamp;
         }
 
         stakeDetail.amountStaked += _amount;
-        stakeDetail.lastInteraction = block.timestamp;
-        lastInteraction = block.timestamp;
 
         stakeDetails[_to] = stakeDetail;
     }
@@ -186,17 +181,12 @@ contract PDTStaking {
 
         uint256 previousStakeAmount = stakeDetail.amountStaked;
         uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
-
-        uint256 percentStakeDecreased = (1e18 * _amount) / previousStakeAmount / 1e18;
-        console.log("DECREASE %: %s", percentStakeDecreased);
+        uint256 timePassed = block.timestamp - previousTimeStaked;
+        uint256 percentStakeDecreased = (1e18 * _amount) / previousStakeAmount;
 
         stakeDetail.amountStaked -= _amount;
-        console.log("TIMESTAMP: %s", block.timestamp);
-        console.log("PREV STAKE: %s", previousTimeStaked);
-        console.log("DIFFERECE: %s", block.timestamp - previousTimeStaked);
-        stakeDetail.adjustedTimeStaked = previousTimeStaked - ((percentStakeDecreased * (block.timestamp - previousTimeStaked)));
-        stakeDetail.lastInteraction = block.timestamp;
-        lastInteraction = block.timestamp;
+
+        stakeDetail.adjustedTimeStaked = previousTimeStaked - ((percentStakeDecreased * timePassed) / 1e18 );
 
         IERC20(pdt).transfer(_to, _amount);
         stakeDetails[msg.sender] = stakeDetail;
@@ -217,6 +207,9 @@ contract PDTStaking {
             userClaimedEpoch[msg.sender][_epochIds[i]] = true;
             Epoch memory _epoch = epoch[_epochIds[i]];
             uint256 _userWeightAtEpoch = userWeightAtEpoch[msg.sender][_epochIds[i]];
+            console.log("USER: %s", _userWeightAtEpoch);
+            console.log("WEIGHT: %s", weightAtEpoch(_epochIds[i]));
+
             uint256 _epochRewards = (_epoch.totalToDistirbute * _userWeightAtEpoch) / weightAtEpoch(_epochIds[i]);
             if (_epoch.totalClaimed + _epochRewards > _epoch.totalToDistirbute) {
                 _epochRewards = _epoch.totalToDistirbute - _epoch.totalClaimed;
