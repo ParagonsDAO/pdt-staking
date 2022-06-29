@@ -1,7 +1,6 @@
 pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "hardhat/console.sol";
 
 /// @title   PDT Staking
 /// @notice  Contract that allows users to stake PDT
@@ -104,7 +103,6 @@ contract PDTStaking {
 
     ) {
         startTime = block.timestamp;
-        adjustedTime = block.timestamp;
         currentEpoch.endTime = block.timestamp;
         timeToDouble = _timeToDouble;
         epochLength = _epochLength;
@@ -119,7 +117,6 @@ contract PDTStaking {
         if (block.timestamp >= currentEpoch.endTime) {
             uint256 multiplier_ = _multiplier(currentEpoch.endTime, adjustedTime);
             epoch[epochId].meanMultiplierAtEnd = multiplier_;
-            console.log("TOTAL STAKED: %s", totalStaked);
             epoch[epochId].weightAtEnd = multiplier_ * totalStaked;
 
             ++epochId;
@@ -182,7 +179,7 @@ contract PDTStaking {
         uint256 previousStakeAmount = stakeDetail.amountStaked;
         uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
         uint256 timePassed = block.timestamp - previousTimeStaked;
-        uint256 percentStakeDecreased = (1e18 * _amount) / previousStakeAmount;
+        uint256 percentStakeDecreased = (1e18 * _amount) / (previousStakeAmount);
 
         stakeDetail.amountStaked -= _amount;
 
@@ -207,8 +204,6 @@ contract PDTStaking {
             userClaimedEpoch[msg.sender][_epochIds[i]] = true;
             Epoch memory _epoch = epoch[_epochIds[i]];
             uint256 _userWeightAtEpoch = userWeightAtEpoch[msg.sender][_epochIds[i]];
-            console.log("USER: %s", _userWeightAtEpoch);
-            console.log("WEIGHT: %s", weightAtEpoch(_epochIds[i]));
 
             uint256 _epochRewards = (_epoch.totalToDistirbute * _userWeightAtEpoch) / weightAtEpoch(_epochIds[i]);
             if (_epoch.totalClaimed + _epochRewards > _epoch.totalToDistirbute) {
@@ -286,6 +281,11 @@ contract PDTStaking {
     /// @param _stake   Bool if `_amount` is being staked or withdrawn
     /// @param _amount  Amount of PDT being staked or withdrawn
     function _adjustMeanMultilpier(bool _stake, uint256 _amount) internal {
+        if (totalStaked == 0) {
+            adjustedTime = block.timestamp;
+            return;
+        }
+
         uint256 previousTotalStaked = totalStaked;
         uint256 previousTimeStaked = adjustedTime;
 
@@ -322,9 +322,5 @@ contract PDTStaking {
 
             epochLeftOff[_user] = epochId;
         }
-    }
-
-    function timestamp() external view returns (uint256) {
-        return block.timestamp;
     }
 }

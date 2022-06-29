@@ -240,24 +240,26 @@ describe('PDT Staking', () => {
 
             await payout.transfer(staking.address, TWO_THOUSAND);
 
-            await staking.stake(deployer.address, ONE_THOUSAND);
+            await staking.stake(deployer.address, FIVE_HUNDRED);
 
             let userBefore = await staking.stakeDetails(user.address);
 
-            await staking.connect(user).unstake(user.address, FIVE_HUNDRED);
+           await staking.connect(user).unstake(user.address, ONE_THOUSAND);
 
             let userAfter = await staking.stakeDetails(user.address);
 
             await network.provider.send("evm_increaseTime", [89410]);
             await network.provider.send("evm_mine");
 
+            await payout.transfer(staking.address, TWO_THOUSAND);
+
             await staking.distirbute();
 
-            await staking.connect(user).claim(user.address, ['1'])
-            await staking.connect(deployer).claim(deployer.address, ['1']);
+            //await staking.connect(user).claim(user.address, ['1'])
+            //await staking.connect(deployer).claim(deployer.address, ['1']);
 
-           // await staking.connect(user).claim(user.address, ['2'])
-            //await staking.connect(deployer).claim(deployer.address, ['2'])
+            await staking.connect(user).claim(user.address, ['2'])
+            await staking.connect(deployer).claim(deployer.address, ['2'])
         
             let epoch1After = await staking.epoch('1');
             console.log(epoch1After);
@@ -269,6 +271,21 @@ describe('PDT Staking', () => {
 
             console.log(userBefore[1])
             console.log(userAfter[1])
+
+
+            await payout.transfer(staking.address, TWO_THOUSAND);
+
+            await network.provider.send("evm_increaseTime", [89410]);
+            await network.provider.send("evm_mine");
+
+            await staking.distirbute();
+
+           await staking.connect(deployer).claim(deployer.address, ['3'])
+
+            let epoch3After = await staking.epoch('3');
+            console.log(epoch3After);
+
+            console.log(await staking.userStakeMultiplier(deployer.address))
 
         });
     });
