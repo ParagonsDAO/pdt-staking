@@ -1,6 +1,7 @@
 pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "hardhat/console.sol";
 
 /// @title   PDT Staking
 /// @notice  Contract that allows users to stake PDT
@@ -22,14 +23,14 @@ contract PDTStaking {
     /// STRUCTS ///
 
     /// @notice                     Details for epoch
-    /// @param totalToDistirbute    Total amount of token to distirbute for epoch
+    /// @param totalToDistribute    Total amount of token to distribute for epoch
     /// @param totalClaimed         Total amount of tokens claimed from epoch
     /// @param startTime            Timestamp epoch started
     /// @param endTime              Timestamp epoch ends
     /// @param meanMultiplierAtEnd  Mean multiplier at end of epoch
     /// @param weightAtEnd          Weight of staked tokens at end of epoch
     struct Epoch {
-        uint256 totalToDistirbute;
+        uint256 totalToDistribute;
         uint256 totalClaimed;
         uint256 startTime;
         uint256 endTime;
@@ -113,22 +114,28 @@ contract PDTStaking {
     /// PUBLIC FUNCTIONS ///
 
     /// @notice  Update epoch details if time
-    function distirbute() public {
+    function distribute() public {
         if (block.timestamp >= currentEpoch.endTime) {
-            uint256 multiplier_ = _multiplier(currentEpoch.endTime, adjustedTime);
+            uint256 multiplier_;
+            if (totalStaked != 0) multiplier_ = _multiplier(currentEpoch.endTime, adjustedTime);
             epoch[epochId].meanMultiplierAtEnd = multiplier_;
             epoch[epochId].weightAtEnd = multiplier_ * totalStaked;
 
             ++epochId;
+
+            console.log(adjustedTime);
+            console.log(block.timestamp);
+            console.log(" ");
+            
             Epoch memory _epoch;
-            _epoch.totalToDistirbute = IERC20(rewardToken).balanceOf(address(this)) - unclaimedRewards;
+            _epoch.totalToDistribute = IERC20(rewardToken).balanceOf(address(this)) - unclaimedRewards;
             _epoch.startTime = block.timestamp;
             _epoch.endTime = block.timestamp + epochLength;
 
             currentEpoch = _epoch;
             epoch[epochId] = _epoch;
 
-            unclaimedRewards += _epoch.totalToDistirbute;
+            unclaimedRewards += _epoch.totalToDistribute;
         }
     }
 
@@ -137,7 +144,7 @@ contract PDTStaking {
     /// @param _amount  Amount of PDT to stake
     function stake(address _to, uint256 _amount) external {
         if (IERC20(pdt).balanceOf(msg.sender) < _amount) revert MoreThanBalance();
-        distirbute();
+        distribute();
         _setUserMultiplierAtEpoch(_to);
         IERC20(pdt).transferFrom(msg.sender, address(this), _amount);
 
@@ -170,7 +177,7 @@ contract PDTStaking {
         Stake memory stakeDetail = stakeDetails[msg.sender];
 
         if (stakeDetail.amountStaked < _amount) revert MoreThanStaked();
-        distirbute();
+        distribute();
         _setUserMultiplierAtEpoch(msg.sender);
         _adjustMeanMultilpier(false, _amount);
 
@@ -183,7 +190,7 @@ contract PDTStaking {
 
         stakeDetail.amountStaked -= _amount;
 
-        stakeDetail.adjustedTimeStaked = previousTimeStaked - ((percentStakeDecreased * timePassed) / 1e18 );
+       // stakeDetail.adjustedTimeStaked = previousTimeStaked - ((percentStakeDecreased * timePassed) / 1e18 );
 
         IERC20(pdt).transfer(_to, _amount);
         stakeDetails[msg.sender] = stakeDetail;
@@ -205,9 +212,9 @@ contract PDTStaking {
             Epoch memory _epoch = epoch[_epochIds[i]];
             uint256 _userWeightAtEpoch = userWeightAtEpoch[msg.sender][_epochIds[i]];
 
-            uint256 _epochRewards = (_epoch.totalToDistirbute * _userWeightAtEpoch) / weightAtEpoch(_epochIds[i]);
-            if (_epoch.totalClaimed + _epochRewards > _epoch.totalToDistirbute) {
-                _epochRewards = _epoch.totalToDistirbute - _epoch.totalClaimed;
+            uint256 _epochRewards = (_epoch.totalToDistribute * _userWeightAtEpoch) / weightAtEpoch(_epochIds[i]);
+            if (_epoch.totalClaimed + _epochRewards > _epoch.totalToDistribute) {
+                _epochRewards = _epoch.totalToDistribute - _epoch.totalClaimed;
             }
             _pendingRewards += _epochRewards;
             _epoch.totalClaimed += _epochRewards;
