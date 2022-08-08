@@ -1,7 +1,6 @@
 pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "hardhat/console.sol";
 
 /// @title   PDT Staking
 /// @notice  Contract that allows users to stake PDT
@@ -121,10 +120,6 @@ contract PDTStaking {
             epoch[epochId].weightAtEnd = multiplier_ * totalStaked;
 
             ++epochId;
-
-            console.log(adjustedTime);
-            console.log(block.timestamp);
-            console.log(" ");
             
             Epoch memory _epoch;
             _epoch.totalToDistribute = IERC20(rewardToken).balanceOf(address(this)) - unclaimedRewards;
@@ -139,7 +134,7 @@ contract PDTStaking {
     }
 
     /// @notice         Stake PDT
-    /// @param _to      Address that will recieve credit for stake
+    /// @param _to      Address that will receive credit for stake
     /// @param _amount  Amount of PDT to stake
     function stake(address _to, uint256 _amount) external {
         if (IERC20(pdt).balanceOf(msg.sender) < _amount) revert MoreThanBalance();
@@ -170,7 +165,7 @@ contract PDTStaking {
     }
 
     /// @notice     Unstake PDT
-    /// @param _to  Address that will recieve PDT unstaked
+    /// @param _to  Address that will receive PDT unstaked
     function unstake(address _to) external {
         Stake memory stakeDetail = stakeDetails[msg.sender];
         uint256 _amountStaked = stakeDetail.amountStaked;
@@ -185,8 +180,9 @@ contract PDTStaking {
         stakeDetail.amountStaked = 0;
         stakeDetail.adjustedTimeStaked = 0;
 
-        IERC20(pdt).transfer(_to, _amountStaked);
         stakeDetails[msg.sender] = stakeDetail;
+
+        IERC20(pdt).transfer(_to, _amountStaked);
     }
 
     /// @notice           Claims rewards tokens for msg.sender of `_epochIds`
@@ -258,10 +254,41 @@ contract PDTStaking {
 
     /// @notice          Returns weight of contract at `_epochId`
     /// @param _epochId  Id of epoch wanting to get weight for
-    /// @return uint256  Weight of contract for `_epochId`
-    function weightAtEpoch(uint256 _epochId) public view returns (uint256) {
+    /// @return weight_  Weight of contract for `_epochId`
+    function weightAtEpoch(uint256 _epochId) public view returns (uint256 weight_) {
         if (epochId <= _epochId) revert InvalidEpoch();
         return epoch[_epochId].weightAtEnd;
+    }
+
+    /// @notice             Returns amount `_user` has claimable for `_epochId`
+    /// @param _user        Address to see `claimable_` for `_epochId`
+    /// @param _epochId     Id of epoch wanting to get `claimable_` for
+    /// @return claimable_  Amount claimable
+    function claimAmountForEpoch(address _user, uint256 _epochId) external view returns (uint256 claimable_) {
+        if (epochId <= _epochId) revert InvalidEpoch();
+        if (userClaimedEpoch[_user][_epochId]) return 0;
+
+        uint256 _epochLeftOff = epochLeftOff[_user];
+
+        Epoch memory _epoch = epoch[_epochId];
+
+        uint256 _userWeightAtEpoch;
+
+        if (_epochLeftOff < epochId) {
+            Stake memory stakeDetail = stakeDetails[_user];
+
+            for (_epochLeftOff; _epochLeftOff < epochId; ++_epochLeftOff) {
+                if (stakeDetail.amountStaked > 0) {
+                    uint256 _adjustedTimePassed = _epoch.endTime - stakeDetail.adjustedTimeStaked;
+                    uint256 _multiplier = multiplierStart + ((multiplierStart * _adjustedTimePassed) / timeToDouble);
+                    _userWeightAtEpoch = _multiplier * stakeDetail.amountStaked;
+                }
+            }
+        } else  {
+            _userWeightAtEpoch = userWeightAtEpoch[_user][_epochId];
+        }
+
+        claimable_ = (_epoch.totalToDistribute * _userWeightAtEpoch) / weightAtEpoch(_epochId);
     }
 
     /// INTERNAL VIEW FUNCTION ///
@@ -297,17 +324,17 @@ contract PDTStaking {
             percent = (1e18 * _amount) / (previousTotalStaked + _amount);
             adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
         } else {
-            // Stake memory stakeDetail = stakeDetails[msg.sender];
+            Stake memory stakeDetail = stakeDetails[msg.sender];
             // uint256 previousStakeAmount = stakeDetail.amountStaked;
-            // percent = (1e18 * _amount) / (previousStakeAmount);
+            percent = (1e18 * _amount) / (previousTotalStaked - _amount);
 
-            // previousTimeStaked = stakeDetail.adjustedTimeStaked;
-            // timePassed = block.timestamp - previousTimeStaked;
+            previousTimeStaked = stakeDetail.adjustedTimeStaked;
+            timePassed = block.timestamp - previousTimeStaked;
 
-            // adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
-
-            percent = (1e18 * _amount) / (previousTotalStaked);
             adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
+
+            // percent = (1e18 * _amount) / (previousTotalStaked);
+            // adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
        }
     }
 
