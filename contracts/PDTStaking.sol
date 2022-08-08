@@ -17,8 +17,8 @@ contract PDTStaking {
     error NothingToClaim();
     /// @notice Error for if staking more than balance
     error MoreThanBalance();
-    /// @notice Error for if unstaking more than staked
-    error MoreThanStaked();
+    /// @notice Error for if unstaking when nothing is staked
+    error NothingStaked();
 
     /// STRUCTS ///
 
@@ -101,7 +101,6 @@ contract PDTStaking {
         uint256 _epochLength,
         address _pdt,
         address _rewardToken
-
     ) {
         startTime = block.timestamp;
         currentEpoch.endTime = block.timestamp;
@@ -170,29 +169,23 @@ contract PDTStaking {
         stakeDetails[_to] = stakeDetail;
     }
 
-    /// @notice         Unstake PDT
-    /// @param _to      Address that will recieve PDT unstaked
-    /// @param _amount  Amount of PDT to unstake
-    function unstake(address _to, uint256 _amount) external {
+    /// @notice     Unstake PDT
+    /// @param _to  Address that will recieve PDT unstaked
+    function unstake(address _to) external {
         Stake memory stakeDetail = stakeDetails[msg.sender];
+        uint256 _amountStaked = stakeDetail.amountStaked;
 
-        if (stakeDetail.amountStaked < _amount) revert MoreThanStaked();
+        if (_amountStaked == 0) revert NothingStaked();
         distribute();
         _setUserMultiplierAtEpoch(msg.sender);
-        _adjustMeanMultilpier(false, _amount);
+        _adjustMeanMultilpier(false, _amountStaked);
 
-        totalStaked -= _amount;
+        totalStaked -= _amountStaked;
 
-        uint256 previousStakeAmount = stakeDetail.amountStaked;
-        uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
-        uint256 timePassed = block.timestamp - previousTimeStaked;
-        uint256 percentStakeDecreased = (1e18 * _amount) / (previousStakeAmount);
+        stakeDetail.amountStaked = 0;
+        stakeDetail.adjustedTimeStaked = 0;
 
-        stakeDetail.amountStaked -= _amount;
-
-       // stakeDetail.adjustedTimeStaked = previousTimeStaked - ((percentStakeDecreased * timePassed) / 1e18 );
-
-        IERC20(pdt).transfer(_to, _amount);
+        IERC20(pdt).transfer(_to, _amountStaked);
         stakeDetails[msg.sender] = stakeDetail;
     }
 
@@ -304,9 +297,18 @@ contract PDTStaking {
             percent = (1e18 * _amount) / (previousTotalStaked + _amount);
             adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
         } else {
+            // Stake memory stakeDetail = stakeDetails[msg.sender];
+            // uint256 previousStakeAmount = stakeDetail.amountStaked;
+            // percent = (1e18 * _amount) / (previousStakeAmount);
+
+            // previousTimeStaked = stakeDetail.adjustedTimeStaked;
+            // timePassed = block.timestamp - previousTimeStaked;
+
+            // adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
+
             percent = (1e18 * _amount) / (previousTotalStaked);
-            adjustedTime = previousTimeStaked - ((timePassed * percent) / 1e18);
-        }
+            adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
+       }
     }
 
     /// @notice        Set epochs of `_user` that they left off on
