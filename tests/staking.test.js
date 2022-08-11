@@ -14,6 +14,8 @@ describe('PDT Staking', () => {
     const TWO_THOUSAND = "2000000000000000000000";
     const FIVE_THOUSAND = "5000000000000000000000";
     const HUNDRED_THOUSAND = "100000000000000000000000";
+    const FIFTY_THOUSAND = "50000000000000000000000";
+    const ONE_MILLION = "1000000000000000000000000";
     const ONE_DAY = "86400";
     const TWO_DAYS = "172800";
     const THIRTY_DAYS = "2592000";
@@ -68,14 +70,12 @@ describe('PDT Staking', () => {
         });
     });
 
-    describe('distributetribute()', () => {
+    describe('distribute()', () => {
         it('should begin first epoch properly', async () => {
             await payout.transfer(staking.address, FIVE_THOUSAND);
             await staking.distribute();
 
             let epoch = await staking.currentEpoch();
-
-            console.log(epoch);
 
             expect(epoch[0]).to.equal(FIVE_THOUSAND);
             expect(epoch[1]).to.equal('0');
@@ -89,25 +89,14 @@ describe('PDT Staking', () => {
 
             await staking.stake(user.address, ONE_THOUSAND);
 
-            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_increaseTime", [272800]);
             await network.provider.send("evm_mine");
 
             await payout.transfer(staking.address, TWO_THOUSAND);
 
             await staking.distribute();
 
-            let epoch1 = await staking.epoch('1');
-
-            console.log(epoch1);
-
-            console.log(await staking.userStakeMultiplierAtEpoch(user.address, '1'));
-            console.log(await staking.userStakeMultiplier(user.address));
-
             await staking.connect(user).claim(user.address, ['1'])
-
-            let epoch1After = await staking.epoch('1');
-
-            console.log(epoch1After);
         });
     });
 
@@ -182,15 +171,7 @@ describe('PDT Staking', () => {
 
             await staking.distribute();
 
-            let epoch1Before = await staking.epoch('1');
-
-            console.log(epoch1Before);
-
             await staking.connect(user).claim(user.address, ['1'])
-
-            let epoch1After = await staking.epoch('1');
-
-            console.log(epoch1After);
         });
 
         it('should claim with multiple addresses claiming', async () => {
@@ -214,16 +195,9 @@ describe('PDT Staking', () => {
             await staking.connect(user).claim(user.address, ['1'])
             await staking.connect(deployer).claim(deployer.address, ['1']);
 
-           await staking.connect(user).claim(user.address, ['2'])
-           await staking.connect(deployer).claim(deployer.address, ['2'])
+            await staking.connect(user).claim(user.address, ['2'])
+            await staking.connect(deployer).claim(deployer.address, ['2'])
         
-        let epoch1After = await staking.epoch('1');
-        console.log(epoch1After);
-
-        let epoch2After = await staking.epoch('2');
-        console.log(epoch2After);
-
-        console.log(await staking.userStakeMultiplier(user2.address))
 
         });
 
@@ -231,22 +205,22 @@ describe('PDT Staking', () => {
             await payout.transfer(staking.address, FIVE_THOUSAND);
             await staking.distribute();
 
-           // await staking.stake(deployer.address, FIVE_HUNDRED);
-           await staking.stake(user2.address, HUNDRED_THOUSAND);
-            await staking.stake(user.address, HUNDRED_THOUSAND);
+            await staking.stake(user.address, '1000000000000000000000000');
 
-            await network.provider.send("evm_increaseTime", [894100]);
+            await network.provider.send("evm_increaseTime", [60000]);
+            
+            await staking.stake(user2.address, HUNDRED_THOUSAND);
+            await staking.stake(user2.address, HUNDRED_THOUSAND);
+
+            await network.provider.send("evm_increaseTime", [89410]);
             await network.provider.send("evm_mine");
 
             await payout.transfer(staking.address, ONE_THOUSAND);
 
-            await staking.stake(deployer.address, HUNDRED_THOUSAND);
-
-            let userBefore = await staking.stakeDetails(user.address);
-
-           await staking.connect(user).unstake(user.address);
-            
-            let userAfter = await staking.stakeDetails(user.address);
+            await staking.stake(deployer.address, FIFTY_THOUSAND);
+             
+            await staking.connect(user).unstake(user.address);
+            // await staking.connect(user2).unstake(user2.address);
 
             await network.provider.send("evm_increaseTime", [91410]);
             await network.provider.send("evm_mine");
@@ -258,21 +232,22 @@ describe('PDT Staking', () => {
             await staking.connect(user).claim(user.address, ['1'])
             await staking.connect(deployer).claim(deployer.address, ['1']);
 
-           // await staking.connect(user).claim(user.address, ['2'])
-           //await staking.connect(user2).claim(user2.address, ['2'])
-           await staking.connect(deployer).claim(deployer.address, ['2'])
+            console.log(await staking.claimAmountForEpoch(user.address, 2));
+            console.log(await staking.claimAmountForEpoch(user2.address, 2));
+            console.log(await staking.claimAmountForEpoch(deployer.address, 2));
+            await staking.connect(user).claim(user.address, ['2'])
+            await staking.connect(user2).claim(user2.address, ['2'])
+            await staking.connect(deployer).claim(deployer.address, ['2'])
         
-            // let epoch1After = await staking.epoch('1');
-            // console.log(epoch1After);
 
             let epoch2After = await staking.epoch('2');
             console.log(epoch2After);
 
-            console.log(await staking.userWeightAtEpoch(user.address, '2'));
-            console.log(await staking.userWeightAtEpoch(deployer.address, '2'));
+            // console.log(await staking.userWeightAtEpoch(user.address, '2'));
+            // console.log(await staking.userWeightAtEpoch(deployer.address, '2'));
 
-            console.log((await staking.stakeDetails(deployer.address))[1])
-            console.log((await staking.stakeDetails(user.address))[1])
+            // console.log((await staking.stakeDetails(deployer.address))[1])
+            // console.log((await staking.stakeDetails(user.address))[1])
 
 
             await payout.transfer(staking.address, TWO_THOUSAND);

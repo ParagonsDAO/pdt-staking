@@ -115,10 +115,9 @@ contract PDTStaking {
     function distribute() public {
         if (block.timestamp >= currentEpoch.endTime) {
             uint256 multiplier_;
-            if (totalStaked != 0) multiplier_ = _multiplier(block.timestamp, adjustedTime);
+            if (totalStaked != 0) multiplier_ = _multiplier(currentEpoch.endTime, adjustedTime);
             epoch[epochId].meanMultiplierAtEnd = multiplier_;
             epoch[epochId].weightAtEnd = multiplier_ * totalStaked;
-           // currentEpoch.endTime = block.timestamp;
 
             ++epochId;
             
@@ -154,7 +153,7 @@ contract PDTStaking {
         if (previousStakeAmount > 0) {
             uint256 previousTimeStaked = stakeDetail.adjustedTimeStaked;
             uint256 timePassed = block.timestamp - previousTimeStaked;
-            uint256 percentStakeIncreased = (1e18 * _amount) / (previousStakeAmount);
+            uint256 percentStakeIncreased = (1e18 * _amount) / (previousStakeAmount + _amount);
             stakeDetail.adjustedTimeStaked = previousTimeStaked + ((percentStakeIncreased * timePassed) / 1e18);
         } else {
             stakeDetail.adjustedTimeStaked = block.timestamp;
@@ -280,6 +279,7 @@ contract PDTStaking {
 
             for (_epochLeftOff; _epochLeftOff < epochId; ++_epochLeftOff) {
                 if (stakeDetail.amountStaked > 0) {
+                    if (stakeDetail.adjustedTimeStaked > _epoch.endTime) return 0;
                     uint256 _adjustedTimePassed = _epoch.endTime - stakeDetail.adjustedTimeStaked;
                     uint256 _multiplier = multiplierStart + ((multiplierStart * _adjustedTimePassed) / timeToDouble);
                     _userWeightAtEpoch = _multiplier * stakeDetail.amountStaked;
@@ -322,20 +322,11 @@ contract PDTStaking {
         uint256 percent;
 
         if (_stake) {
-            percent = (1e18 * _amount) / (previousTotalStaked);
-            adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
+            percent = (1e18 * _amount) / (previousTotalStaked + _amount);
+            adjustedTime += (timePassed * percent) / 1e18;
         } else {
-            Stake memory stakeDetail = stakeDetails[msg.sender];
-          //  uint256 previousStakeAmount = stakeDetail.amountStaked;
-            // percent = (1e18 * _amount) / (previousTotalStaked);
-
-           // previousTimeStaked = stakeDetail.adjustedTimeStaked;
-           // timePassed = block.timestamp - previousTimeStaked;
-
-            // adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
-
-            // percent = (1e18 * _amount) / (previousTotalStaked - _amount);
-            // adjustedTime = previousTimeStaked + ((timePassed * percent) / 1e18);
+            percent = (1e18 * (previousTotalStaked - _amount)) / (previousTotalStaked);
+            adjustedTime -= (timePassed * percent) / 1e18;
        }
     }
 
