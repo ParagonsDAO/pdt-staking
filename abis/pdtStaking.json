@@ -20,6 +20,11 @@
                 "internalType": "address",
                 "name": "_rewardToken",
                 "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "_owner",
+                "type": "address"
             }
         ],
         "stateMutability": "nonpayable",
@@ -42,12 +47,22 @@
     },
     {
         "inputs": [],
-        "name": "MoreThanStaked",
+        "name": "NotOwner",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "NothingStaked",
         "type": "error"
     },
     {
         "inputs": [],
         "name": "NothingToClaim",
+        "type": "error"
+    },
+    {
+        "inputs": [],
+        "name": "ZeroAddress",
         "type": "error"
     },
     {
@@ -82,12 +97,36 @@
         "type": "function"
     },
     {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "_epochId",
+                "type": "uint256"
+            }
+        ],
+        "name": "claimAmountForEpoch",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "claimable_",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
         "inputs": [],
         "name": "currentEpoch",
         "outputs": [
             {
                 "internalType": "uint256",
-                "name": "totalToDistirbute",
+                "name": "totalToDistribute",
                 "type": "uint256"
             },
             {
@@ -121,7 +160,7 @@
     },
     {
         "inputs": [],
-        "name": "distirbute",
+        "name": "distribute",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
@@ -138,7 +177,7 @@
         "outputs": [
             {
                 "internalType": "uint256",
-                "name": "totalToDistirbute",
+                "name": "totalToDistribute",
                 "type": "uint256"
             },
             {
@@ -256,6 +295,19 @@
     },
     {
         "inputs": [],
+        "name": "owner",
+        "outputs": [
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
         "name": "pdt",
         "outputs": [
             {
@@ -365,16 +417,37 @@
         "inputs": [
             {
                 "internalType": "address",
+                "name": "_newOwner",
+                "type": "address"
+            }
+        ],
+        "name": "transferOwnership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
                 "name": "_to",
                 "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "_amount",
-                "type": "uint256"
             }
         ],
         "name": "unstake",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_epochLength",
+                "type": "uint256"
+            }
+        ],
+        "name": "updateEpochLength",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
@@ -506,7 +579,7 @@
         "outputs": [
             {
                 "internalType": "uint256",
-                "name": "",
+                "name": "weight_",
                 "type": "uint256"
             }
         ],
