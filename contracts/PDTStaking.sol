@@ -18,6 +18,10 @@ contract PDTStaking {
     error MoreThanBalance();
     /// @notice Error for if unstaking when nothing is staked
     error NothingStaked();
+    /// @notice Error for if not owner
+    error NotOwner();
+    /// @notice Error for if zero address
+    error ZeroAddress();
 
     /// STRUCTS ///
 
@@ -50,7 +54,7 @@ contract PDTStaking {
     /// @notice Starting multiplier
     uint256 public constant multiplierStart = 1e18;
     /// @notice Length of epoch
-    uint256 public immutable epochLength;
+    uint256 public epochLength;
 
     /// @notice Timestmap contract was deplpoyed
     uint256 public immutable startTime;
@@ -75,6 +79,8 @@ contract PDTStaking {
     address public immutable pdt;
     /// @notice Address of reward token
     address public immutable rewardToken;
+    /// @notice Address of owner
+    address public owner;
 
     /// @notice If user has claimed for certain epoch
     mapping(address => mapping(uint256 => bool)) public userClaimedEpoch;
@@ -95,11 +101,13 @@ contract PDTStaking {
     /// @param _epochLength   Length of epoch
     /// @param _pdt           PDT token address
     /// @param _rewardToken   Address of reward token
+    /// @param _owner   Address of owner
     constructor(
         uint256 _timeToDouble,
         uint256 _epochLength,
         address _pdt,
-        address _rewardToken
+        address _rewardToken,
+        address _owner
     ) {
         startTime = block.timestamp;
         currentEpoch.endTime = block.timestamp;
@@ -107,6 +115,24 @@ contract PDTStaking {
         epochLength = _epochLength;
         pdt = _pdt;
         rewardToken = _rewardToken;
+        owner = _owner;
+    }
+
+    /// OWNER FUNCTION ///
+
+    /// @notice              Update epoch length of contract
+    /// @param _epochLength  New epoch length
+    function updateEpochLength(uint256 _epochLength) external {
+        if (msg.sender != owner) revert NotOwner();
+        epochLength = _epochLength;
+    }
+
+    /// @notice           Changing owner of contract to `newOwner_`
+    /// @param _newOwner  Address of who will be the new owner of contract
+    function transferOwnership(address _newOwner) external {
+        if (msg.sender != owner) revert NotOwner();
+        if (_newOwner == address(0)) revert ZeroAddress();
+        owner = _newOwner;
     }
 
     /// PUBLIC FUNCTIONS ///
@@ -280,9 +306,8 @@ contract PDTStaking {
             for (_epochLeftOff; _epochLeftOff < epochId; ++_epochLeftOff) {
                 if (stakeDetail.amountStaked > 0) {
                     if (stakeDetail.adjustedTimeStaked > _epoch.endTime) return 0;
-                    uint256 _adjustedTimePassed = _epoch.endTime - stakeDetail.adjustedTimeStaked;
-                    uint256 _multiplier = multiplierStart + ((multiplierStart * _adjustedTimePassed) / timeToDouble);
-                    _userWeightAtEpoch = _multiplier * stakeDetail.amountStaked;
+                    uint256 _multiplierAtEpoch = _multiplier(_epoch.endTime, stakeDetail.adjustedTimeStaked);
+                    _userWeightAtEpoch = _multiplierAtEpoch * stakeDetail.amountStaked;
                 }
             }
         } else  {
@@ -341,10 +366,9 @@ contract PDTStaking {
             for (_epochLeftOff; _epochLeftOff < epochId; ++_epochLeftOff) {
                 Epoch memory _epoch = epoch[_epochLeftOff];
                 if (stakeDetail.amountStaked > 0) {
-                    uint256 _adjustedTimePassed = _epoch.endTime - stakeDetail.adjustedTimeStaked;
-                    uint256 _multiplier = multiplierStart + ((multiplierStart * _adjustedTimePassed) / timeToDouble);
-                    userMultiplierAtEpoch[_user][_epochLeftOff] = _multiplier;
-                    userWeightAtEpoch[_user][_epochLeftOff] = _multiplier * stakeDetail.amountStaked;
+                    uint256 _multiplierAtEpoch = _multiplier(_epoch.endTime, stakeDetail.adjustedTimeStaked);
+                    userMultiplierAtEpoch[_user][_epochLeftOff] = _multiplierAtEpoch;
+                    userWeightAtEpoch[_user][_epochLeftOff] = _multiplierAtEpoch * stakeDetail.amountStaked;
                 }
             }
 
