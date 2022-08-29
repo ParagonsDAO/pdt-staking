@@ -286,6 +286,14 @@ contract PDTStaking {
         return epoch[_epochId].weightAtEnd;
     }
 
+    /// @notice          Returns weight of `_user`
+    /// @param _user     User to check weight for
+    /// @return weight_  Weight of `_user`
+    function userWeight(address _user) external view returns (uint256 weight_) {
+        Stake memory stakeDetail = stakeDetails[_user];
+        return stakeDetail.amountStaked * userStakeMultiplier(_user);
+    }
+
     /// @notice             Returns amount `_user` has claimable for `_epochId`
     /// @param _user        Address to see `claimable_` for `_epochId`
     /// @param _epochId     Id of epoch wanting to get `claimable_` for
