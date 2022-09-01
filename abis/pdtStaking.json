@@ -12,13 +12,18 @@
                 "type": "uint256"
             },
             {
+                "internalType": "uint256",
+                "name": "_firstEpochStartIn",
+                "type": "uint256"
+            },
+            {
                 "internalType": "address",
                 "name": "_pdt",
                 "type": "address"
             },
             {
                 "internalType": "address",
-                "name": "_rewardToken",
+                "name": "_prime",
                 "type": "address"
             },
             {
@@ -57,17 +62,12 @@
     },
     {
         "inputs": [],
-        "name": "NothingToClaim",
-        "type": "error"
-    },
-    {
-        "inputs": [],
         "name": "ZeroAddress",
         "type": "error"
     },
     {
         "inputs": [],
-        "name": "adjustedTime",
+        "name": "_contractWeight",
         "outputs": [
             {
                 "internalType": "uint256",
@@ -122,6 +122,38 @@
     },
     {
         "inputs": [],
+        "name": "contractWeight",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "contractWeight_",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_epochId",
+                "type": "uint256"
+            }
+        ],
+        "name": "contractWeightAtEpoch",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "contractWeight_",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
         "name": "currentEpoch",
         "outputs": [
             {
@@ -142,11 +174,6 @@
             {
                 "internalType": "uint256",
                 "name": "endTime",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "meanMultiplierAtEnd",
                 "type": "uint256"
             },
             {
@@ -193,11 +220,6 @@
             {
                 "internalType": "uint256",
                 "name": "endTime",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "meanMultiplierAtEnd",
                 "type": "uint256"
             },
             {
@@ -256,33 +278,7 @@
     },
     {
         "inputs": [],
-        "name": "meanMultiplier",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "multiplier_",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "multiplierIndex",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "index_",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "multiplierStart",
+        "name": "lastInteraction",
         "outputs": [
             {
                 "internalType": "uint256",
@@ -321,7 +317,7 @@
     },
     {
         "inputs": [],
-        "name": "rewardToken",
+        "name": "prime",
         "outputs": [
             {
                 "internalType": "address",
@@ -367,20 +363,12 @@
             },
             {
                 "internalType": "uint256",
-                "name": "adjustedTimeStaked",
+                "name": "lastInteraction",
                 "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "startTime",
-        "outputs": [
+            },
             {
                 "internalType": "uint256",
-                "name": "",
+                "name": "weightAtLastInteraction",
                 "type": "uint256"
             }
         ],
@@ -480,39 +468,15 @@
         "inputs": [
             {
                 "internalType": "address",
-                "name": "",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            }
-        ],
-        "name": "userMultiplierAtEpoch",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
                 "name": "_user",
                 "type": "address"
             }
         ],
-        "name": "userStakeMultiplier",
+        "name": "userTotalWeight",
         "outputs": [
             {
                 "internalType": "uint256",
-                "name": "multiplier_",
+                "name": "userWeight_",
                 "type": "uint256"
             }
         ],
@@ -529,49 +493,6 @@
             {
                 "internalType": "uint256",
                 "name": "_epochId",
-                "type": "uint256"
-            }
-        ],
-        "name": "userStakeMultiplierAtEpoch",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "multiplier_",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "_user",
-                "type": "address"
-            }
-        ],
-        "name": "userWeight",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "weight_",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "",
                 "type": "uint256"
             }
         ],
@@ -579,26 +500,7 @@
         "outputs": [
             {
                 "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint256",
-                "name": "_epochId",
-                "type": "uint256"
-            }
-        ],
-        "name": "weightAtEpoch",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "weight_",
+                "name": "userWeight_",
                 "type": "uint256"
             }
         ],
