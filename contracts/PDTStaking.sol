@@ -53,7 +53,7 @@ contract PDTStaking {
     /// @notice Length of epoch
     uint256 public epochLength;
 
-    /// @notice Time to double multiplier
+    /// @notice Time to double weight
     uint256 public immutable timeToDouble;
 
     /// @notice Last interaction with contract
@@ -93,11 +93,11 @@ contract PDTStaking {
 
     /// CONSTRUCTOR ///
 
-    /// @param _timeToDouble       Time for multiplier to double
+    /// @param _timeToDouble       Time for weight to double
     /// @param _epochLength        Length of epoch
     /// @param _firstEpochStartIn  Amount of time first epoch will start in
     /// @param _pdt                PDT token address
-    /// @param _prime        Address of reward token
+    /// @param _prime              Address of reward token
     /// @param _owner              Address of owner
     constructor(
         uint256 _timeToDouble,
@@ -236,6 +236,23 @@ contract PDTStaking {
 
     /// VIEW FUNCTIONS ///
 
+    /// @notice              Returns total weight `_user` has currently
+    /// @param _user         Address to calculate `userWeight_` of
+    /// @return userWeight_  Weight of `_user`
+    function userTotalWeight(address _user) public view returns (uint256 userWeight_) {
+        Stake memory _stake = stakeDetails[_user];
+        uint256 _additionalWeight = _weightIncreaseSinceInteraction(block.timestamp, _stake.lastInteraction, _stake.amountStaked);
+        userWeight_ = _additionalWeight + _stake.weightAtLastInteraction;
+    }
+
+    /// @notice                  Returns total weight of contract at `_epochId`
+    /// @param _epochId          Epoch to return total weight of contract for
+    /// @return contractWeight_  Weight of contract at end of `_epochId`
+    function contractWeightAtEpoch(uint256 _epochId) public view returns (uint256 contractWeight_) {
+        if (epochId <= _epochId) revert InvalidEpoch();
+        return epoch[_epochId].weightAtEnd;
+    }
+
     /// @notice             Returns amount `_user` has claimable for `_epochId`
     /// @param _user        Address to see `claimable_` for `_epochId`
     /// @param _epochId     Id of epoch wanting to get `claimable_` for
@@ -263,17 +280,10 @@ contract PDTStaking {
         claimable_ = (_epoch.totalToDistribute * _weightAtEpoch) / contractWeightAtEpoch(_epochId);
     }
 
-    function userTotalWeight(address _user) public view returns (uint256 userWeight_) {
-        Stake memory _stake = stakeDetails[_user];
-        uint256 _additionalWeight = _weightIncreaseSinceInteraction(block.timestamp, _stake.lastInteraction, _stake.amountStaked);
-        userWeight_ = _additionalWeight + _stake.weightAtLastInteraction;
-    }
-
-    function contractWeightAtEpoch(uint256 _epochId) public view returns (uint256 contractWeight_) {
-        if (epochId <= _epochId) revert InvalidEpoch();
-        return epoch[_epochId].weightAtEnd;
-    }
-
+    /// @notice              Returns total weight of `_user` at `_epochId`
+    /// @param _user         Address to calculate `userWeight_` of for `_epochId`
+    /// @param _epochId      Epoch id to calculate weight of `_user`
+    /// @return userWeight_  Weight of `_user` for `_epochId`
     function userWeightAtEpoch(address _user, uint256 _epochId) external view returns (uint256 userWeight_) {
         if (epochId <= _epochId) revert InvalidEpoch();
         uint256 _epochLeftOff = epochLeftOff[_user];
@@ -289,6 +299,8 @@ contract PDTStaking {
         }
     }
 
+    /// @notice                  Returns current total weight of contract
+    /// @return contractWeight_  Total current weight of contract
     function contractWeight() external view returns (uint256 contractWeight_) {
         uint256 _weightIncrease = _weightIncreaseSinceInteraction(block.timestamp, lastInteraction, totalStaked);
         contractWeight_ = _weightIncrease + _contractWeight;
@@ -296,11 +308,11 @@ contract PDTStaking {
 
     /// INTERNAL VIEW FUNCTION ///
 
-    /// @notice                    Returns multiplier using `_timestamp`
+    /// @notice                    Returns additional weight since `_lastInteraction` at `_timestamp`
     /// @param _timestamp          Timestamp calculating on
     /// @param _lastInteraction    Last interaction time
     /// @param _baseAmount         Base amount of PDT to account for
-    /// @return additionalWeight_  Multitplier using `_timeStamp`
+    /// @return additionalWeight_  Additional weight since `_lastinteraction` at `_timestamp`
     function _weightIncreaseSinceInteraction(uint256 _timestamp, uint256 _lastInteraction, uint256 _baseAmount) internal view returns (uint256 additionalWeight_) {
         uint256 _timePassed = _timestamp - _lastInteraction;
         uint256 _multiplierReceived = 1e18 * _timePassed / timeToDouble;
@@ -309,7 +321,7 @@ contract PDTStaking {
 
     /// INTERNAL FUNCTIONS ///
 
-    /// @notice         Adjust mean multiplier of the contract
+    /// @notice         Adjust contract weight since last interaction
     /// @param _stake   Bool if `_amount` is being staked or withdrawn
     /// @param _amount  Amount of PDT being staked or withdrawn
     function _adjustContractWeight(bool _stake, uint256 _amount) internal {
