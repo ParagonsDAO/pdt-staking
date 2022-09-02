@@ -50,25 +50,21 @@ contract PDTStaking {
 
     /// STATE VARIABLES ///
 
-    /// @notice Length of epoch
-    uint256 public epochLength;
-
     /// @notice Time to double weight
     uint256 public immutable timeToDouble;
-
-    /// @notice Last interaction with contract
-    uint256 public lastInteraction;
-
-    /// @notice Total amount of PDT staked
-    uint256 public totalStaked;
-    /// @notice Total amount of weight within contract
-    uint256 public _contractWeight;
-
-    /// @notice Amount of unclaimed rewards
-    uint256 private unclaimedRewards;
-
     /// @notice Epoch id
     uint256 public epochId;
+    /// @notice Length of epoch
+    uint256 public epochLength;
+    /// @notice Last interaction with contract
+    uint256 public lastInteraction;
+    /// @notice Total amount of PDT staked
+    uint256 public totalStaked;
+
+    /// @notice Total amount of weight within contract
+    uint256 internal _contractWeight;
+    /// @notice Amount of unclaimed rewards
+    uint256 private unclaimedRewards;
 
     /// @notice Current epoch
     Epoch public currentEpoch;
@@ -331,7 +327,8 @@ contract PDTStaking {
         if (_stake) {
             _contractWeight += _amount;
         } else {
-            _contractWeight -= userTotalWeight(msg.sender);
+            if (userTotalWeight(msg.sender) > _contractWeight) _contractWeight = 0;
+            else _contractWeight -= userTotalWeight(msg.sender);
        }
 
        lastInteraction = block.timestamp;
@@ -349,7 +346,6 @@ contract PDTStaking {
                     Epoch memory _epoch = epoch[_epochLeftOff];
                     uint256 _additionalWeight = _weightIncreaseSinceInteraction(_epoch.endTime, _stake.lastInteraction, _stake.amountStaked);
                     _userWeightAtEpoch[_user][_epochLeftOff] = _additionalWeight + _stake.weightAtLastInteraction;
-                    
                 }
             }
 

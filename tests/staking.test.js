@@ -19,6 +19,7 @@ describe("PDT Staking", () => {
     const TWO_DAYS = "172800";
     const FIFTEEN_DAYS = "1296000";
     const THIRTY_DAYS = "2592000";
+    const ONE_GWEI = 1000000000;
 
     let // Used as default deployer for contracts, asks as owner of contracts.
         deployer,
@@ -460,6 +461,117 @@ describe("PDT Staking", () => {
 
     });
 
+    describe("userTotalWeight()", () => {
+        it('should have total weight as 0 if nothing is staked', async () => {
+            expect(await staking.userTotalWeight(user.address)).to.equal('0');
+        });
+
+        it('should have total weight at 0 if user unstakes', async () => {
+            await staking.stake(user.address, ONE_THOUSAND);
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+
+            await staking.connect(user).unstake(user.address);
+            expect(await staking.userTotalWeight(user.address)).to.equal('0');
+        })
+
+        it('should have total weight initally be amount staked', async () => {
+            await staking.stake(user.address, ONE_THOUSAND);
+            expect(await staking.userTotalWeight(user.address)).to.equal(ONE_THOUSAND);
+        });
+
+        it('should account for pending weight increase since last interaction', async () => {
+            await staking.stake(user.address, ONE_THOUSAND);
+
+            /// 2592000 = 30 days, Double period
+            await network.provider.send("evm_increaseTime", [2592000]);
+            await network.provider.send("evm_mine");
+            expect(await staking.userTotalWeight(user.address)).to.equal(TWO_THOUSAND);
+        });
+    });
+
+    describe("contractWeightAtEpoch()", () => {
+        it('should fail if trying to get weight for current epoch', async () => {
+            /// EPOCH 0 ///
+            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+
+            await staking.distribute();
+
+            /// EPOCH 1 ///
+            await staking.stake(user.address, ONE_THOUSAND);
+
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
+
+            await expect(staking.contractWeightAtEpoch('1')).to.be.revertedWith("InvalidEpoch()");
+        });
+
+        it('should fail if trying to get contract weight for future epoch', async () => {
+            /// EPOCH 0 ///
+            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+
+            await staking.distribute();
+
+            /// EPOCH 1 ///
+            await staking.stake(user.address, ONE_THOUSAND);
+
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
+
+            await expect(staking.connect(user).contractWeightAtEpoch('2')).to.be.revertedWith("InvalidEpoch()");
+        });
+
+        it('should return proper contract weight at end of epoch', async () => {
+            /// EPOCH 0 ///
+            await staking.stake(deployer.address, ONE_THOUSAND);
+
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [1296000]);
+            await network.provider.send("evm_mine");
+
+            await staking.stake(user.address, TWO_THOUSAND);
+
+            /// EPOCH 1 ///
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [2592000]);
+            await network.provider.send("evm_mine");
+
+            await staking.stake(user2.address, FIVE_THOUSAND);
+
+            /// EPOCH 2 ///
+
+            await staking.connect(user).unstake(user.address);
+
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
+
+            await staking.distribute();
+
+            const sumOfUserWeight1 =
+                +(await staking.userWeightAtEpoch(deployer.address, '1')).toString() +
+                +(await staking.userWeightAtEpoch(user.address, '1')).toString() +
+                +(await staking.userWeightAtEpoch(user2.address, '1')).toString();
+
+            expect(+(await staking.contractWeightAtEpoch('1')).toString()).to.equal(+sumOfUserWeight1);
+
+            const sumOfUserWeight2 =
+                +(await staking.userWeightAtEpoch(deployer.address, '2')).toString() +
+                +(await staking.userWeightAtEpoch(user.address, '2')).toString() +
+                +(await staking.userWeightAtEpoch(user2.address, '2')).toString();
+
+            expect(Number(sumOfUserWeight2 - (await staking.contractWeightAtEpoch('2')))).to.be.lessThan(ONE_GWEI);
+        });
+
+    });
+
     describe("claimAmountForEpoch()", () => {
         it('should fail if trying to get claim amount for current epoch', async () => {
             /// EPOCH 0 ///
@@ -567,45 +679,177 @@ describe("PDT Staking", () => {
         });
     });
 
-    describe("userTotalWeight()", () => {
-        it('should have total weight as 0 if nothing is staked', async () => {
-            expect(await staking.userTotalWeight(user.address)).to.equal('0');
+    describe("userWeightAtEpoch()", () => {
+        it('should fail if trying to get user weight for current epoch', async () => {
+            /// EPOCH 0 ///
+            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+
+            await staking.distribute();
+
+            /// EPOCH 1 ///
+            await staking.stake(user.address, ONE_THOUSAND);
+
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
+
+            await expect(staking.userWeightAtEpoch(user.address, '1')).to.be.revertedWith("InvalidEpoch()");
         });
 
-        it('should have total weight at 0 if user unstakes', async () => {
+        it('should fail if trying to get user weight for future epoch', async () => {
+            /// EPOCH 0 ///
+            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+
+            await staking.distribute();
+
+            /// EPOCH 1 ///
+            await staking.stake(user.address, ONE_THOUSAND);
+
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
+
+            await expect(staking.connect(user).userWeightAtEpoch(user.address, '2')).to.be.revertedWith("InvalidEpoch()");
+        });
+
+        it('should return 0 if stake triggers epoch', async () => {
+            /// EPOCH 0 ///
+            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+
+            await staking.distribute();
+
+            /// EPOCH 1 ///
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
+            await staking.stake(user.address, ONE_THOUSAND);
+
+            /// EPOCH 2 ///
+            expect(await staking.userWeightAtEpoch(user.address, '1')).to.equal('0');
+        });
+
+        it('should return proper user weight at epoch', async () => {
+            /// EPOCH 0 ///
+            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+
+            await staking.distribute();
+
+            /// EPOCH 1 ///
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
+            await staking.stake(user.address, ONE_THOUSAND);
+
+            /// EPOCH 2 ///
+            expect(await staking.userWeightAtEpoch(user.address, '1')).to.equal('0');
+
+            await network.provider.send("evm_increaseTime", [142800]);
+            await network.provider.send("evm_mine");
+            await staking.distribute();
+
+            /// EPOCH 3 ///
+            const additionalWeight = ONE_THOUSAND * (1/30);
+            expect(await staking.userWeightAtEpoch(user.address, '2') - additionalWeight).to.equal(+ONE_THOUSAND);
+        });
+
+    });
+
+    describe("contractWeight()", () => {
+        it('should be weight of 0 if no one has staked yet', async () => {
+            expect(await staking.contractWeight()).to.equal('0');
+        });
+
+        it('should be weight of 0 if everyone unstaked', async () => {
+            /// EPOCH 0 ///
+            await payout.transfer(staking.address, FIVE_THOUSAND);
             await staking.stake(user.address, ONE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
 
-            await staking.connect(user).unstake(user.address);
-            expect(await staking.userTotalWeight(user.address)).to.equal('0');
-        })
+            await staking.distribute();
 
-        it('should have total weight initally be amount staked', async () => {
+            /// EPOCH 1 ///
+            await staking.stake(user2.address, ONE_THOUSAND);
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
             await staking.stake(user.address, ONE_THOUSAND);
-            expect(await staking.userTotalWeight(user.address)).to.equal(ONE_THOUSAND);
+
+            /// EPOCH 2 ///
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [142800]);
+            await network.provider.send("evm_mine");
+
+            await staking.connect(user).unstake(user.address);
+            await staking.connect(user2).unstake(user2.address);
+
+            expect(await staking.contractWeight()).to.equal('0');
         });
 
-        it('should account for pending weight increase since last interaction', async () => {
+        it('should have weight properly when one staker', async () => {
+            /// EPOCH 0 ///
+            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await staking.stake(user.address, ONE_THOUSAND);
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+
+            await staking.distribute();
+
+            /// EPOCH 1 ///
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
             await staking.stake(user.address, ONE_THOUSAND);
 
-            /// 2592000 = 30 days, Double period
+            /// EPOCH 2 ///
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [142800]);
+            await network.provider.send("evm_mine");
+
+            expect(await staking.contractWeight()).to.equal(await staking.userTotalWeight(user.address));
+        });
+
+        it('should have weight properly with multiple stakers', async () => {
+            /// EPOCH 0 ///
+            await staking.stake(deployer.address, ONE_THOUSAND);
+
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [1296000]);
+            await network.provider.send("evm_mine");
+
+            await staking.stake(user.address, TWO_THOUSAND);
+
+            /// EPOCH 1 ///
+            await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [2592000]);
             await network.provider.send("evm_mine");
-            expect(await staking.userTotalWeight(user.address)).to.equal(TWO_THOUSAND);
+
+            await staking.stake(user2.address, FIVE_THOUSAND);
+
+            /// EPOCH 2 ///
+            await staking.connect(user).unstake(user.address);
+
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [172800]);
+            await network.provider.send("evm_mine");
+
+            await staking.distribute();
+            
+            /// EPOCH 3 ///
+            const sumOfUserWeight =
+                +(await staking.userTotalWeight(deployer.address)).toString() +
+                +(await staking.userTotalWeight(user.address)).toString() +
+                +(await staking.userTotalWeight(user2.address)).toString();
+
+            expect(Number(sumOfUserWeight - (await staking.contractWeight()))).to.be.lessThan(ONE_GWEI);
         });
-    });
-
-    describe("contractWeightAtEpoch()", () => {
-
-    });
-
-    describe("userWeightAtEpoch()", () => {
-
-    });
-
-    describe("contractWeight()", () => {
-
     });
 });
