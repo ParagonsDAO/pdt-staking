@@ -257,30 +257,16 @@ contract PDTStaking {
         if (epochId <= _epochId) revert InvalidEpoch();
         if (userClaimedEpoch[_user][_epochId]) return 0;
 
-        uint256 _epochLeftOff = epochLeftOff[_user];
-
         Epoch memory _epoch = epoch[_epochId];
 
-        uint256 _weightAtEpoch;
-
-        if (_epochLeftOff <= _epochId) {
-            Stake memory _stake = stakeDetails[_user];
-            if (_stake.amountStaked > 0) {
-                uint256 _additionalWeight = _weightIncreaseSinceInteraction(_epoch.endTime, _stake.lastInteraction, _stake.amountStaked);
-                _weightAtEpoch = _additionalWeight + _stake.weightAtLastInteraction;
-            }
-        } else  {
-            _weightAtEpoch = _userWeightAtEpoch[_user][_epochId];
-        }
-
-        claimable_ = (_epoch.totalToDistribute * _weightAtEpoch) / contractWeightAtEpoch(_epochId);
+        claimable_ = (_epoch.totalToDistribute * userWeightAtEpoch(_user, _epochId)) / contractWeightAtEpoch(_epochId);
     }
 
     /// @notice              Returns total weight of `_user` at `_epochId`
     /// @param _user         Address to calculate `userWeight_` of for `_epochId`
     /// @param _epochId      Epoch id to calculate weight of `_user`
     /// @return userWeight_  Weight of `_user` for `_epochId`
-    function userWeightAtEpoch(address _user, uint256 _epochId) external view returns (uint256 userWeight_) {
+    function userWeightAtEpoch(address _user, uint256 _epochId) public view returns (uint256 userWeight_) {
         if (epochId <= _epochId) revert InvalidEpoch();
         uint256 _epochLeftOff = epochLeftOff[_user];
         Stake memory _stake = stakeDetails[_user];
