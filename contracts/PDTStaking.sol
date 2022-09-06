@@ -1,11 +1,12 @@
 pragma solidity 0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 /// @title   PDT Staking
 /// @notice  Contract that allows users to stake PDT
 /// @author  JeffX
-contract PDTStaking {
+contract PDTStaking is ReentrancyGuard {
 
     /// ERRORS ///
 
@@ -132,33 +133,18 @@ contract PDTStaking {
     /// PUBLIC FUNCTIONS ///
 
     /// @notice  Update epoch details if time
-    function distribute() public {
-        if (block.timestamp >= currentEpoch.endTime) {
-            uint256 _additionalWeight = _weightIncreaseSinceInteraction(currentEpoch.endTime, lastInteraction, totalStaked);
-            epoch[epochId].weightAtEnd = _additionalWeight + _contractWeight;
-
-            ++epochId;
-            
-            Epoch memory _epoch;
-            _epoch.totalToDistribute = IERC20(prime).balanceOf(address(this)) - unclaimedRewards;
-            _epoch.startTime = block.timestamp;
-            _epoch.endTime = block.timestamp + epochLength;
-
-            currentEpoch = _epoch;
-            epoch[epochId] = _epoch;
-
-            unclaimedRewards += _epoch.totalToDistribute;
-        }
+    function distribute() external nonReentrant {
+        _distribute();
     }
 
     /// @notice         Stake PDT
     /// @param _to      Address that will receive credit for stake
     /// @param _amount  Amount of PDT to stake
-    function stake(address _to, uint256 _amount) external {
+    function stake(address _to, uint256 _amount) external nonReentrant {
         if (IERC20(pdt).balanceOf(msg.sender) < _amount) revert MoreThanBalance();
         IERC20(pdt).transferFrom(msg.sender, address(this), _amount);
 
-        distribute();
+        _distribute();
         _setUserWeightAtEpoch(_to);
         _adjustContractWeight(true, _amount);
 
@@ -181,12 +167,12 @@ contract PDTStaking {
 
     /// @notice     Unstake PDT
     /// @param _to  Address that will receive PDT unstaked
-    function unstake(address _to) external {
+    function unstake(address _to) external nonReentrant {
         Stake memory _stake = stakeDetails[msg.sender];
 
         if (_stake.amountStaked == 0) revert NothingStaked();
 
-        distribute();
+        _distribute();
         _setUserWeightAtEpoch(msg.sender);
         _adjustContractWeight(false, _stake.amountStaked);
 
@@ -204,7 +190,7 @@ contract PDTStaking {
     /// @notice           Claims rewards tokens for msg.sender of `_epochIds`
     /// @param _to        Address to send rewards to
     /// @param _epochIds  Array of epoch ids to claim for
-    function claim(address _to, uint256[] calldata _epochIds) external {
+    function claim(address _to, uint256[] calldata _epochIds) external nonReentrant {
         _setUserWeightAtEpoch(msg.sender);
 
         uint256 _pendingRewards;
@@ -336,6 +322,26 @@ contract PDTStaking {
             }
 
             epochLeftOff[_user] = epochId;
+        }
+    }
+
+    /// @notice  Update epoch details if time
+    function _distribute() internal {
+        if (block.timestamp >= currentEpoch.endTime) {
+            uint256 _additionalWeight = _weightIncreaseSinceInteraction(currentEpoch.endTime, lastInteraction, totalStaked);
+            epoch[epochId].weightAtEnd = _additionalWeight + _contractWeight;
+
+            ++epochId;
+            
+            Epoch memory _epoch;
+            _epoch.totalToDistribute = IERC20(prime).balanceOf(address(this)) - unclaimedRewards;
+            _epoch.startTime = block.timestamp;
+            _epoch.endTime = block.timestamp + epochLength;
+
+            currentEpoch = _epoch;
+            epoch[epochId] = _epoch;
+
+            unclaimedRewards += _epoch.totalToDistribute;
         }
     }
 }
