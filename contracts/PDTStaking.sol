@@ -1,12 +1,13 @@
 pragma solidity 0.8.7;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 /// @title   PDT Staking
 /// @notice  Contract that allows users to stake PDT
 /// @author  JeffX
 contract PDTStaking is ReentrancyGuard {
+    using SafeERC20 for IERC20;
 
     /// ERRORS ///
 
@@ -142,7 +143,7 @@ contract PDTStaking is ReentrancyGuard {
     /// @param _amount  Amount of PDT to stake
     function stake(address _to, uint256 _amount) external nonReentrant {
         if (IERC20(pdt).balanceOf(msg.sender) < _amount) revert MoreThanBalance();
-        IERC20(pdt).transferFrom(msg.sender, address(this), _amount);
+        IERC20(pdt).safeTransferFrom(msg.sender, address(this), _amount);
 
         _distribute();
         _setUserWeightAtEpoch(_to);
@@ -184,7 +185,7 @@ contract PDTStaking is ReentrancyGuard {
 
         stakeDetails[msg.sender] = _stake;
 
-        IERC20(pdt).transfer(_to, _stake.amountStaked);
+        IERC20(pdt).safeTransfer(_to, _stake.amountStaked);
     }
 
     /// @notice           Claims rewards tokens for msg.sender of `_epochIds`
@@ -213,7 +214,7 @@ contract PDTStaking is ReentrancyGuard {
         }
 
         unclaimedRewards -= _pendingRewards;
-        IERC20(prime).transfer(_to, _pendingRewards);
+        IERC20(prime).safeTransfer(_to, _pendingRewards);
     }
 
     /// VIEW FUNCTIONS ///
