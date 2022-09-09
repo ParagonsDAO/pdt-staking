@@ -286,6 +286,19 @@ describe("PDT Staking", () => {
             expect(await staking.userTotalWeight(deployer.address)).to.equal("0");
         });
 
+        it('should unstake and send back pdt', async () => {
+            await staking.stake(deployer.address, ONE_THOUSAND);
+
+            const balanceBefore = (await pdt.balanceOf(deployer.address)).toString();
+
+            await staking.unstake(deployer.address);
+
+            const balanceAfter = (await pdt.balanceOf(deployer.address)).toString();
+
+            expect(+balanceAfter).to.equal(+balanceBefore + +ONE_THOUSAND);
+
+        });
+
     });
 
     describe("claim()", () => {
