@@ -87,7 +87,7 @@
                 "type": "uint256"
             }
         ],
-        "name": "claimed",
+        "name": "Claimed",
         "type": "event"
     },
     {
@@ -112,7 +112,7 @@
                 "type": "uint256"
             }
         ],
-        "name": "staked",
+        "name": "Staked",
         "type": "event"
     },
     {
@@ -131,7 +131,7 @@
                 "type": "uint256"
             }
         ],
-        "name": "unstaked",
+        "name": "Unstaked",
         "type": "event"
     },
     {

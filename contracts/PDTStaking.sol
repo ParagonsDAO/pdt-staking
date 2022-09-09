@@ -15,18 +15,18 @@ contract PDTStaking is ReentrancyGuard {
     /// @param to               Address of who is receiving credit of stake
     /// @param newStakeAmount   New stake amount of `to`
     /// @param newWeightAmount  New weight amount of `to`  
-    event staked(address to, uint256 indexed newStakeAmount, uint256 indexed newWeightAmount);
+    event Staked(address to, uint256 indexed newStakeAmount, uint256 indexed newWeightAmount);
 
     /// @notice                Emitted upon user unstaking
     /// @param staker          Address of who is unstaking
     /// @param amountUnstaked  Amount `staker` unstaked
-    event unstaked(address staker, uint256 indexed amountUnstaked);
+    event Unstaked(address staker, uint256 indexed amountUnstaked);
 
     /// @notice               Emitted upon staker claiming
     /// @param staker         Address of who claimed rewards
     /// @param epochsClaimed  Array of epochs claimed
     /// @param claimed        Amount claimed
-    event claimed(address staker, uint256[] indexed epochsClaimed, uint256 indexed claimed);
+    event Claimed(address staker, uint256[] indexed epochsClaimed, uint256 indexed claimed);
 
 
     /// ERRORS ///
@@ -185,7 +185,7 @@ contract PDTStaking is ReentrancyGuard {
 
         stakeDetails[_to] = _stake;
 
-        emit staked(_to, _stake.amountStaked, _stake.weightAtLastInteraction);
+        emit Staked(_to, _stake.amountStaked, _stake.weightAtLastInteraction);
     }
 
     /// @notice     Unstake PDT
@@ -211,7 +211,7 @@ contract PDTStaking is ReentrancyGuard {
 
         IERC20(pdt).safeTransfer(_to, _stakedAmount);
 
-        emit unstaked(msg.sender, _stakedAmount);
+        emit Unstaked(msg.sender, _stakedAmount);
     }
 
     /// @notice           Claims rewards tokens for msg.sender of `_epochIds`
@@ -242,7 +242,7 @@ contract PDTStaking is ReentrancyGuard {
         unclaimedRewards -= _pendingRewards;
         IERC20(prime).safeTransfer(_to, _pendingRewards);
 
-        emit claimed(msg.sender, _epochIds, _pendingRewards);
+        emit Claimed(msg.sender, _epochIds, _pendingRewards);
     }
 
     /// VIEW FUNCTIONS ///
