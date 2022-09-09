@@ -66,17 +66,73 @@
         "type": "error"
     },
     {
-        "inputs": [],
-        "name": "_contractWeight",
-        "outputs": [
+        "anonymous": false,
+        "inputs": [
             {
+                "indexed": false,
+                "internalType": "address",
+                "name": "staker",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint256[]",
+                "name": "epochsClaimed",
+                "type": "uint256[]"
+            },
+            {
+                "indexed": true,
                 "internalType": "uint256",
-                "name": "",
+                "name": "claimed",
                 "type": "uint256"
             }
         ],
-        "stateMutability": "view",
-        "type": "function"
+        "name": "claimed",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "to",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "newStakeAmount",
+                "type": "uint256"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "newWeightAmount",
+                "type": "uint256"
+            }
+        ],
+        "name": "staked",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "staker",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "amountUnstaked",
+                "type": "uint256"
+            }
+        ],
+        "name": "unstaked",
+        "type": "event"
     },
     {
         "inputs": [
