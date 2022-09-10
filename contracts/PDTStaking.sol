@@ -129,8 +129,11 @@ contract PDTStaking is ReentrancyGuard {
         epochLength = _epochLength;
         currentEpoch.endTime = block.timestamp + _firstEpochStartIn;
         epoch[0].endTime = block.timestamp + _firstEpochStartIn;
+        require(_pdt != address(0), "Zero Addresss: PDT");
         pdt = _pdt;
+        require(_prime != address(0), "Zero Addresss: PRIME");
         prime = _prime;
+        require(_owner != address(0), "Zero Addresss: Owner");
         owner = _owner;
     }
 
