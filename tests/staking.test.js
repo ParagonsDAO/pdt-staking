@@ -37,8 +37,8 @@ describe("PDT Staking", () => {
 
         ERC20Factory = await ethers.getContractFactory("MockERC20");
 
-        pdt = await ERC20Factory.deploy();
-        payout = await ERC20Factory.deploy();
+        pdt = await ERC20Factory.deploy("Test PDT", "TPDT");
+        payout = await ERC20Factory.deploy("Test Payout", "TPAY");
 
         Staking = await ethers.getContractFactory("PDTStaking");
         staking = await Staking.deploy(
@@ -149,6 +149,17 @@ describe("PDT Staking", () => {
     });
 
     describe("stake()", () => {
+        it('should stake twice for user', async () => {
+            await staking.stake(deployer.address, HUNDRED_THOUSAND);
+
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [1296]);
+            await network.provider.send("evm_mine");
+
+            await staking.stake(deployer.address, FIFTY_THOUSAND);
+
+        });
+
         it("should NOT stake if trying to stake more than balance", async () => {
             await expect(
                 staking.connect(user2).stake(user2.address, TWO_THOUSAND)
