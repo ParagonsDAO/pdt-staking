@@ -88,7 +88,7 @@ contract PDTStaking is ReentrancyGuard {
     /// @notice Total amount of weight within contract
     uint256 internal _contractWeight;
     /// @notice Amount of unclaimed rewards
-    uint256 private unclaimedRewards;
+    uint256 public unclaimedRewards;
 
     /// @notice Current epoch
     Epoch public currentEpoch;
@@ -256,6 +256,12 @@ contract PDTStaking is ReentrancyGuard {
     }
 
     /// VIEW FUNCTIONS ///
+
+    /// @notice                  Returns current pending rewards for next epoch
+    /// @return pendingRewards_  Current pending rewards for next epoch
+    function pendingRewards() external view returns (uint256 pendingRewards_) {
+        return IERC20(prime).balanceOf(address(this)) - unclaimedRewards;
+    }
 
     /// @notice              Returns total weight `_user` has currently
     /// @param _user         Address to calculate `userWeight_` of
