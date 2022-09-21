@@ -35,6 +35,8 @@ contract PDTStaking is ReentrancyGuard {
     error InvalidEpoch();
     /// @notice Error for if user has claimed for epoch
     error EpochClaimed();
+    /// @notice Error for if user has already claimed up to current epoch
+    error ClaimedUpToEpoch();
     /// @notice Error for if staking more than balance
     error MoreThanBalance();
     /// @notice Error for if unstaking when nothing is staked
@@ -86,7 +88,7 @@ contract PDTStaking is ReentrancyGuard {
     /// @notice Total amount of weight within contract
     uint256 internal _contractWeight;
     /// @notice Amount of unclaimed rewards
-    uint256 private unclaimedRewards;
+    uint256 public unclaimedRewards;
 
     /// @notice Current epoch
     Epoch public currentEpoch;
@@ -102,8 +104,10 @@ contract PDTStaking is ReentrancyGuard {
     mapping(address => mapping(uint256 => bool)) public userClaimedEpoch;
     /// @notice User's weight at an epoch
     mapping(address => mapping(uint256 => uint256)) internal _userWeightAtEpoch;
-    /// @notice Epoch user has last claimed
+    /// @notice Epoch user has last interacted
     mapping(address => uint256) public epochLeftOff;
+    /// @notice Epoch user has last claimed
+    mapping(address => uint256) public claimLeftOff;
     /// @notice Id to epoch details
     mapping(uint256 => Epoch) public epoch;
     /// @notice Stake details of user
@@ -129,6 +133,8 @@ contract PDTStaking is ReentrancyGuard {
         epochLength = _epochLength;
         currentEpoch.endTime = block.timestamp + _firstEpochStartIn;
         epoch[0].endTime = block.timestamp + _firstEpochStartIn;
+        currentEpoch.startTime = block.timestamp;
+        epoch[0].startTime = block.timestamp;
         require(_pdt != address(0), "Zero Addresss: PDT");
         pdt = _pdt;
         require(_prime != address(0), "Zero Addresss: PRIME");
@@ -217,38 +223,45 @@ contract PDTStaking is ReentrancyGuard {
         emit Unstaked(msg.sender, _stakedAmount);
     }
 
-    /// @notice           Claims rewards tokens for msg.sender of `_epochIds`
-    /// @param _to        Address to send rewards to
-    /// @param _epochIds  Array of epoch ids to claim for
-    function claim(address _to, uint256[] calldata _epochIds) external nonReentrant {
+    /// @notice     Claims all pending rewards tokens for msg.sender
+    /// @param _to  Address to send rewards to
+    function claim(address _to) external nonReentrant {
         _setUserWeightAtEpoch(msg.sender);
 
         uint256 _pendingRewards;
+        uint256 _claimLeftOff = claimLeftOff[msg.sender];
 
-        for (uint256 i; i < _epochIds.length; ++i) {
-            if (userClaimedEpoch[msg.sender][_epochIds[i]]) revert EpochClaimed();
-            if (epochId <= _epochIds[i]) revert InvalidEpoch();
+        if (_claimLeftOff == epochId) revert ClaimedUpToEpoch();
 
-            userClaimedEpoch[msg.sender][_epochIds[i]] = true;
-            Epoch memory _epoch = epoch[_epochIds[i]];
-            uint256 _weightAtEpoch = _userWeightAtEpoch[msg.sender][_epochIds[i]];
+        for (_claimLeftOff; _claimLeftOff < epochId; ++_claimLeftOff) {
+            if (!userClaimedEpoch[msg.sender][_claimLeftOff] && contractWeightAtEpoch(_claimLeftOff) > 0) {
 
-            uint256 _epochRewards = (_epoch.totalToDistribute * _weightAtEpoch) / contractWeightAtEpoch(_epochIds[i]);
-            if (_epoch.totalClaimed + _epochRewards > _epoch.totalToDistribute) {
-                _epochRewards = _epoch.totalToDistribute - _epoch.totalClaimed;
+                userClaimedEpoch[msg.sender][_claimLeftOff] = true;
+                Epoch memory _epoch = epoch[_claimLeftOff];
+                uint256 _weightAtEpoch = _userWeightAtEpoch[msg.sender][_claimLeftOff];
+        
+                uint256 _epochRewards = (_epoch.totalToDistribute * _weightAtEpoch) / contractWeightAtEpoch(_claimLeftOff);
+                if (_epoch.totalClaimed + _epochRewards > _epoch.totalToDistribute) {
+                    _epochRewards = _epoch.totalToDistribute - _epoch.totalClaimed;
+                }
+
+                _pendingRewards += _epochRewards;
+                epoch[_claimLeftOff].totalClaimed += _epochRewards;
             }
-            _pendingRewards += _epochRewards;
-            _epoch.totalClaimed += _epochRewards;
-            epoch[_epochIds[i]] = _epoch;
         }
 
+        claimLeftOff[msg.sender] = epochId;
         unclaimedRewards -= _pendingRewards;
         IERC20(prime).safeTransfer(_to, _pendingRewards);
-
-        emit Claimed(msg.sender, _epochIds, _pendingRewards);
     }
 
     /// VIEW FUNCTIONS ///
+
+    /// @notice                  Returns current pending rewards for next epoch
+    /// @return pendingRewards_  Current pending rewards for next epoch
+    function pendingRewards() external view returns (uint256 pendingRewards_) {
+        return IERC20(prime).balanceOf(address(this)) - unclaimedRewards;
+    }
 
     /// @notice              Returns total weight `_user` has currently
     /// @param _user         Address to calculate `userWeight_` of
@@ -273,7 +286,7 @@ contract PDTStaking is ReentrancyGuard {
     /// @return claimable_  Amount claimable
     function claimAmountForEpoch(address _user, uint256 _epochId) external view returns (uint256 claimable_) {
         if (epochId <= _epochId) revert InvalidEpoch();
-        if (userClaimedEpoch[_user][_epochId]) return 0;
+        if (userClaimedEpoch[_user][_epochId] || contractWeightAtEpoch(_epochId) == 0) return 0;
 
         Epoch memory _epoch = epoch[_epochId];
 

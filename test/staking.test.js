@@ -57,7 +57,6 @@ describe("PDT Staking", () => {
         await pdt.mint(deployer.address, TEN_MILLION);
         await pdt.mint(user.address, TEN_MILLION);
 
-        await payout.mint(deployer.address, TEN_MILLION);
 
         await pdt.approve(staking.address, TEN_MILLION);
         await pdt.connect(user).approve(staking.address, TEN_MILLION);
@@ -122,7 +121,7 @@ describe("PDT Staking", () => {
     describe("distribute()", () => {
         it("should NOT start first epoch after deployment, if not passed end time", async () => {
             expect(await staking.epochId()).to.equal("0");
-            await payout.transfer(staking.address, ONE_HUNDRED);
+            await payout.mint(staking.address, ONE_HUNDRED);
 
             await staking.distribute();
             let currentEpoch = await staking.currentEpoch();
@@ -133,7 +132,7 @@ describe("PDT Staking", () => {
 
         it("should start first epoch after deployment, if passed end time", async () => {
             expect(await staking.epochId()).to.equal("0");
-            await payout.transfer(staking.address, ONE_HUNDRED);
+            await payout.mint(staking.address, ONE_HUNDRED);
 
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
@@ -312,15 +311,16 @@ describe("PDT Staking", () => {
 
     });
 
+
     describe("claim()", () => {
-        it('should NOT allow claim for invalid epoch', async () => {
+        it('should NOT allow claim all during epoch 0', async () => {
             /// EPOCH 0 ///
-            await expect(staking.connect(user).claim(user.address, ['1'])).to.be.revertedWith("InvalidEpoch()");
+            await expect(staking.connect(user).claim(user.address)).to.be.revertedWith("ClaimedUpToEpoch()");
         });
 
-        it('should NOT allow claim for epoch already claimed', async () => {
+        it('should NOT allow claim for epoch after already claimed', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -336,13 +336,13 @@ describe("PDT Staking", () => {
             /// EPOCH 2 ///
             await staking.distribute();
 
-            await staking.connect(user).claim(user.address, ['1'])
-            await expect(staking.connect(user).claim(user.address, ['1'])).to.be.revertedWith("EpochClaimed()");
+            await staking.connect(user).claim(user.address);
+            await expect(staking.connect(user).claim(user.address)).to.be.revertedWith("ClaimedUpToEpoch()");
         });
 
         it('should claim properly when just one staker', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -363,7 +363,7 @@ describe("PDT Staking", () => {
 
             expect(epoch1Before[1]).to.equal("0");
 
-            await staking.connect(user).claim(user.address, ['1'])
+            await staking.connect(user).claim(user.address);
 
             let rewardBalanceAfter = await payout.balanceOf(user.address);
 
@@ -375,7 +375,7 @@ describe("PDT Staking", () => {
 
         it('should claim proeperly with multiple addresses claiming with NO unstaking', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -388,7 +388,7 @@ describe("PDT Staking", () => {
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
 
-            await payout.transfer(staking.address, TWO_THOUSAND);
+            await payout.mint(staking.address, TWO_THOUSAND);
 
             await staking.stake(deployer.address, ONE_THOUSAND);
 
@@ -406,11 +406,9 @@ describe("PDT Staking", () => {
             expect(epoch1Before[1]).to.equal('0');
             expect(epoch2Before[1]).to.equal('0');
 
-            await staking.connect(user).claim(user.address, ['1'])
-            await staking.connect(deployer).claim(deployer.address, ['1']);
+            await staking.connect(user).claim(user.address);
+            await staking.connect(deployer).claim(deployer.address);
 
-            await staking.connect(user).claim(user.address, ['2'])
-            await staking.connect(deployer).claim(deployer.address, ['2'])
 
             let epoch1After = await staking.epoch('1');
             let epoch2After = await staking.epoch('2');
@@ -421,7 +419,7 @@ describe("PDT Staking", () => {
 
         it('should claim proeperly with multiple addresses claiming with unstaking', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -436,17 +434,18 @@ describe("PDT Staking", () => {
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
 
-            await payout.transfer(staking.address, TWO_THOUSAND);
+            await payout.mint(staking.address, TWO_THOUSAND);
 
             await staking.stake(deployer.address, ONE_THOUSAND);
 
             /// EPOCH 2 ///
+            let claimAmountForUserEpoch1 = await staking.claimAmountForEpoch(user.address, '1');
+            await staking.connect(user).claim(user.address);
             await staking.connect(user).unstake(user.address);
 
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [129410]);
             await network.provider.send("evm_mine");
-            
 
             await staking.distribute();
 
@@ -454,35 +453,76 @@ describe("PDT Staking", () => {
 
             expect(await staking.claimAmountForEpoch(deployer.address, '1')).to.equal('0');
 
-            let rewardBalanceBeforeDeployer = await payout.balanceOf(deployer.address);
-
-            await staking.connect(user).claim(user.address, ['1'])
-            await staking.connect(user2).claim(user2.address, ['1'])
-            await staking.connect(deployer).claim(deployer.address, ['1']);
-            let rewardBalanceAfterDeployer = await payout.balanceOf(deployer.address);
-
-            expect(rewardBalanceAfterDeployer).to.equal(rewardBalanceBeforeDeployer);
-
-            expect(await staking.claimAmountForEpoch(user.address, '2')).to.equal('0');
-
             let rewardBalanceBeforeUser = await payout.balanceOf(user.address);
 
-            await staking.connect(user).claim(user.address, ['2'])
-            await staking.connect(user2).claim(user2.address, ['2'])
-            await staking.connect(deployer).claim(deployer.address, ['2'])
+            await staking.connect(user).claim(user.address);
+            await staking.connect(user2).claim(user2.address);
+            await staking.connect(deployer).claim(deployer.address);
 
             let rewardBalanceAfterUser = await payout.balanceOf(user.address);
+
             expect(rewardBalanceAfterUser).to.equal(rewardBalanceBeforeUser);
+            expect(rewardBalanceAfterUser).to.equal(claimAmountForUserEpoch1);
 
             let epoch1After = await staking.epoch('1');
             let epoch2After = await staking.epoch('2');
-
 
             expect(epoch1After[1]).to.equal(FIVE_THOUSAND);
             expect(epoch2After[1]).to.equal(TWO_THOUSAND);
         });
 
+        it('should claim properly when claiming all from current epochs, then calling again', async () => {
+            /// EPOCH 0 ///
+            await payout.mint(staking.address, FIVE_THOUSAND);
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
 
+            await staking.stake(user.address, ONE_THOUSAND);
+
+            /// EPOCH 1 ///
+            await staking.stake(user2.address, FIVE_THOUSAND);
+
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+
+            await payout.mint(staking.address, TWO_THOUSAND);
+
+            await staking.stake(deployer.address, ONE_THOUSAND);
+
+            /// EPOCH 2 ///
+
+            expect(await staking.claimLeftOff(user.address)).to.equal('0');
+            expect(await staking.claimLeftOff(user2.address)).to.equal('0');
+            expect(await staking.claimLeftOff(deployer.address)).to.equal('0');
+
+            await staking.connect(user).claim(user.address);
+            await staking.connect(user2).claim(user2.address);
+            await staking.connect(deployer).claim(deployer.address);
+
+            expect(await staking.claimLeftOff(user.address)).to.equal('2');
+            expect(await staking.claimLeftOff(user2.address)).to.equal('2');
+            expect(await staking.claimLeftOff(deployer.address)).to.equal('2');
+
+            await staking.connect(user).unstake(user.address);
+
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [129410]);
+            await network.provider.send("evm_mine");
+            
+            await staking.distribute();
+
+            /// EPOCH 3 ///
+
+            await staking.connect(user).claim(user.address);
+            await staking.connect(user2).claim(user2.address);
+            await staking.connect(deployer).claim(deployer.address);
+
+            expect(await staking.claimLeftOff(user.address)).to.equal('3');
+            expect(await staking.claimLeftOff(user2.address)).to.equal('3');
+            expect(await staking.claimLeftOff(deployer.address)).to.equal('3');
+        });
     });
 
     describe("userTotalWeight()", () => {
@@ -518,7 +558,7 @@ describe("PDT Staking", () => {
     describe("contractWeightAtEpoch()", () => {
         it('should fail if trying to get weight for current epoch', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -536,7 +576,7 @@ describe("PDT Staking", () => {
 
         it('should fail if trying to get contract weight for future epoch', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -599,7 +639,7 @@ describe("PDT Staking", () => {
     describe("claimAmountForEpoch()", () => {
         it('should fail if trying to get claim amount for current epoch', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -617,7 +657,7 @@ describe("PDT Staking", () => {
 
         it('should fail if trying to get claim amount for future epoch', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -635,7 +675,7 @@ describe("PDT Staking", () => {
 
         it('should return claim amount when weight not set in contract at epoch yet', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await staking.stake(user.address, ONE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
@@ -658,7 +698,7 @@ describe("PDT Staking", () => {
 
         it('should return claim amount when weight is set in contract at epoch', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await staking.stake(user.address, ONE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
@@ -682,7 +722,7 @@ describe("PDT Staking", () => {
 
         it('should return 0 when already claimed', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await staking.stake(user.address, ONE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
@@ -698,7 +738,7 @@ describe("PDT Staking", () => {
             await staking.distribute();
 
             /// EPOCH 2 ///
-            await staking.connect(user).claim(user.address, ['1'])
+            await staking.connect(user).claim(user.address)
             expect(await staking.claimAmountForEpoch(user.address, '1')).to.equal('0');
         });
     });
@@ -706,7 +746,7 @@ describe("PDT Staking", () => {
     describe("userWeightAtEpoch()", () => {
         it('should fail if trying to get user weight for current epoch', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -724,7 +764,7 @@ describe("PDT Staking", () => {
 
         it('should fail if trying to get user weight for future epoch', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -742,7 +782,7 @@ describe("PDT Staking", () => {
 
         it('should return 0 if stake triggers epoch', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -760,7 +800,7 @@ describe("PDT Staking", () => {
 
         it('should return proper user weight at epoch', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
@@ -793,7 +833,7 @@ describe("PDT Staking", () => {
 
         it('should be weight of 0 if everyone unstaked', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await staking.stake(user.address, ONE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
@@ -820,7 +860,7 @@ describe("PDT Staking", () => {
 
         it('should have weight properly when one staker', async () => {
             /// EPOCH 0 ///
-            await payout.transfer(staking.address, FIVE_THOUSAND);
+            await payout.mint(staking.address, FIVE_THOUSAND);
             await staking.stake(user.address, ONE_THOUSAND);
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
