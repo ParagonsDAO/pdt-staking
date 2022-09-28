@@ -11,10 +11,19 @@ contract PDTStaking is ReentrancyGuard {
 
     /// EVENTS ///
 
+    /// @notice            Emitted if epoch 0 is pushed back
+    /// @param newEndTime  New end time of epoch 0
+    event Epoch0PushedBack(uint256 indexed newEndTime);
+
+    /// @notice                     Emitted if epoch length is updated
+    /// @param previousEpochLength  Previous length of epochs
+    /// @param newEpochLength       New length of epochs
+    event EpochLengthUpdated(uint256 indexed previousEpochLength, uint256 indexed newEpochLength);
+
     /// @notice                 Emitted upon address staking
     /// @param to               Address of who is receiving credit of stake
     /// @param newStakeAmount   New stake amount of `to`
-    /// @param newWeightAmount  New weight amount of `to`  
+    /// @param newWeightAmount  New weight amount of `to`
     event Staked(address to, uint256 indexed newStakeAmount, uint256 indexed newWeightAmount);
 
     /// @notice                Emitted upon user unstaking
@@ -28,13 +37,10 @@ contract PDTStaking is ReentrancyGuard {
     /// @param claimed        Amount claimed
     event Claimed(address staker, uint256[] indexed epochsClaimed, uint256 indexed claimed);
 
-
     /// ERRORS ///
 
     /// @notice Error for if epoch is invalid
     error InvalidEpoch();
-    /// @notice Error for if user has claimed for epoch
-    error EpochClaimed();
     /// @notice Error for if user has already claimed up to current epoch
     error ClaimedUpToEpoch();
     /// @notice Error for if staking more than balance
@@ -45,6 +51,8 @@ contract PDTStaking is ReentrancyGuard {
     error NotOwner();
     /// @notice Error for if zero address
     error ZeroAddress();
+    /// @notice Error for if after epoch 0
+    error AfterEpoch0();
 
     /// STRUCTS ///
 
@@ -145,11 +153,26 @@ contract PDTStaking is ReentrancyGuard {
 
     /// OWNER FUNCTION ///
 
+    /// @notice                 Push back epoch 0, used in case PRIME can not be transferred at current end time
+    /// @param _timeToPushBack  Amount of time to push epoch 0 back by
+    function pushBackEpoch0(uint256 _timeToPushBack) external {
+        if (msg.sender != owner) revert NotOwner();
+        if (epochId != 0) revert AfterEpoch0();
+
+        currentEpoch.endTime += _timeToPushBack;
+        epoch[0].endTime += _timeToPushBack;
+
+        emit Epoch0PushedBack(currentEpoch.endTime);
+    }
+
     /// @notice              Update epoch length of contract
     /// @param _epochLength  New epoch length
     function updateEpochLength(uint256 _epochLength) external {
         if (msg.sender != owner) revert NotOwner();
+        uint256 previousEpochLength_ = epochLength;
         epochLength = _epochLength;
+
+        emit EpochLengthUpdated(previousEpochLength_, _epochLength);
     }
 
     /// @notice           Changing owner of contract to `newOwner_`
@@ -183,7 +206,11 @@ contract PDTStaking is ReentrancyGuard {
         Stake memory _stake = stakeDetails[_to];
 
         if (_stake.amountStaked > 0) {
-            uint256 _additionalWeight = _weightIncreaseSinceInteraction(block.timestamp, _stake.lastInteraction, _stake.amountStaked);
+            uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+                block.timestamp,
+                _stake.lastInteraction,
+                _stake.amountStaked
+            );
             _stake.weightAtLastInteraction += (_additionalWeight + _amount);
         } else {
             _stake.weightAtLastInteraction = _amount;
@@ -235,12 +262,12 @@ contract PDTStaking is ReentrancyGuard {
 
         for (_claimLeftOff; _claimLeftOff < epochId; ++_claimLeftOff) {
             if (!userClaimedEpoch[msg.sender][_claimLeftOff] && contractWeightAtEpoch(_claimLeftOff) > 0) {
-
                 userClaimedEpoch[msg.sender][_claimLeftOff] = true;
                 Epoch memory _epoch = epoch[_claimLeftOff];
                 uint256 _weightAtEpoch = _userWeightAtEpoch[msg.sender][_claimLeftOff];
-        
-                uint256 _epochRewards = (_epoch.totalToDistribute * _weightAtEpoch) / contractWeightAtEpoch(_claimLeftOff);
+
+                uint256 _epochRewards = (_epoch.totalToDistribute * _weightAtEpoch) /
+                    contractWeightAtEpoch(_claimLeftOff);
                 if (_epoch.totalClaimed + _epochRewards > _epoch.totalToDistribute) {
                     _epochRewards = _epoch.totalToDistribute - _epoch.totalClaimed;
                 }
@@ -268,7 +295,11 @@ contract PDTStaking is ReentrancyGuard {
     /// @return userWeight_  Weight of `_user`
     function userTotalWeight(address _user) public view returns (uint256 userWeight_) {
         Stake memory _stake = stakeDetails[_user];
-        uint256 _additionalWeight = _weightIncreaseSinceInteraction(block.timestamp, _stake.lastInteraction, _stake.amountStaked);
+        uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+            block.timestamp,
+            _stake.lastInteraction,
+            _stake.amountStaked
+        );
         userWeight_ = _additionalWeight + _stake.weightAtLastInteraction;
     }
 
@@ -306,7 +337,11 @@ contract PDTStaking is ReentrancyGuard {
         else {
             Epoch memory _epoch = epoch[_epochId];
             if (_stake.amountStaked > 0) {
-                uint256 _additionalWeight = _weightIncreaseSinceInteraction(_epoch.endTime, _stake.lastInteraction, _stake.amountStaked);
+                uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+                    _epoch.endTime,
+                    _stake.lastInteraction,
+                    _stake.amountStaked
+                );
                 userWeight_ = _additionalWeight + _stake.weightAtLastInteraction;
             }
         }
@@ -326,10 +361,14 @@ contract PDTStaking is ReentrancyGuard {
     /// @param _lastInteraction    Last interaction time
     /// @param _baseAmount         Base amount of PDT to account for
     /// @return additionalWeight_  Additional weight since `_lastinteraction` at `_timestamp`
-    function _weightIncreaseSinceInteraction(uint256 _timestamp, uint256 _lastInteraction, uint256 _baseAmount) internal view returns (uint256 additionalWeight_) {
+    function _weightIncreaseSinceInteraction(
+        uint256 _timestamp,
+        uint256 _lastInteraction,
+        uint256 _baseAmount
+    ) internal view returns (uint256 additionalWeight_) {
         uint256 _timePassed = _timestamp - _lastInteraction;
-        uint256 _multiplierReceived = 1e18 * _timePassed / timeToDouble;
-        additionalWeight_ = _baseAmount * _multiplierReceived / 1e18;
+        uint256 _multiplierReceived = (1e18 * _timePassed) / timeToDouble;
+        additionalWeight_ = (_baseAmount * _multiplierReceived) / 1e18;
     }
 
     /// INTERNAL FUNCTIONS ///
@@ -338,7 +377,11 @@ contract PDTStaking is ReentrancyGuard {
     /// @param _stake   Bool if `_amount` is being staked or withdrawn
     /// @param _amount  Amount of PDT being staked or withdrawn
     function _adjustContractWeight(bool _stake, uint256 _amount) internal {
-        uint256 _weightReceivedSinceInteraction = _weightIncreaseSinceInteraction(block.timestamp, lastInteraction, totalStaked);
+        uint256 _weightReceivedSinceInteraction = _weightIncreaseSinceInteraction(
+            block.timestamp,
+            lastInteraction,
+            totalStaked
+        );
         _contractWeight += _weightReceivedSinceInteraction;
 
         if (_stake) {
@@ -346,9 +389,9 @@ contract PDTStaking is ReentrancyGuard {
         } else {
             if (userTotalWeight(msg.sender) > _contractWeight) _contractWeight = 0;
             else _contractWeight -= userTotalWeight(msg.sender);
-       }
+        }
 
-       lastInteraction = block.timestamp;
+        lastInteraction = block.timestamp;
     }
 
     /// @notice        Set epochs of `_user` that they left off on
@@ -361,7 +404,11 @@ contract PDTStaking is ReentrancyGuard {
             if (_stake.amountStaked > 0) {
                 for (_epochLeftOff; _epochLeftOff < epochId; ++_epochLeftOff) {
                     Epoch memory _epoch = epoch[_epochLeftOff];
-                    uint256 _additionalWeight = _weightIncreaseSinceInteraction(_epoch.endTime, _stake.lastInteraction, _stake.amountStaked);
+                    uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+                        _epoch.endTime,
+                        _stake.lastInteraction,
+                        _stake.amountStaked
+                    );
                     _userWeightAtEpoch[_user][_epochLeftOff] = _additionalWeight + _stake.weightAtLastInteraction;
                 }
             }
@@ -373,11 +420,15 @@ contract PDTStaking is ReentrancyGuard {
     /// @notice  Update epoch details if time
     function _distribute() internal {
         if (block.timestamp >= currentEpoch.endTime) {
-            uint256 _additionalWeight = _weightIncreaseSinceInteraction(currentEpoch.endTime, lastInteraction, totalStaked);
+            uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+                currentEpoch.endTime,
+                lastInteraction,
+                totalStaked
+            );
             epoch[epochId].weightAtEnd = _additionalWeight + _contractWeight;
 
             ++epochId;
-            
+
             Epoch memory _epoch;
             _epoch.totalToDistribute = IERC20(prime).balanceOf(address(this)) - unclaimedRewards;
             _epoch.startTime = block.timestamp;

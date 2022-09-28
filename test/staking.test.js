@@ -89,6 +89,38 @@ describe("PDT Staking", () => {
         });
     });
 
+    describe("pushBackEpoch0", () => {
+        it('should NOT let non owner address to update epoch 0 end time', async () => {
+            let epochBefore = await staking.currentEpoch();
+            await expect(staking.connect(user).pushBackEpoch0(THIRTY_DAYS)).to.be.revertedWith("NotOwner()");
+            let epochAfter = await staking.currentEpoch();
+            expect(epochBefore.endTime).to.equal(epochAfter.endTime);
+        });
+
+        it('should NOT let owner epoch 0 end time if passed epoch 0', async () => {
+            /// EPOCH 0 ///
+            await payout.mint(staking.address, FIVE_THOUSAND);
+            await network.provider.send("evm_mine");
+            await network.provider.send("evm_increaseTime", [86410]);
+            await network.provider.send("evm_mine");
+            await staking.distribute();
+
+            /// EPOCH 1 ///
+            let epochBefore = await staking.currentEpoch();
+            await expect(staking.connect(deployer).pushBackEpoch0(THIRTY_DAYS)).to.be.revertedWith("AfterEpoch0()");
+            let epochAfter = await staking.currentEpoch();
+            expect(epochBefore.endTime).to.equal(epochAfter.endTime);
+        });
+
+        it('should allow owner to update epoch length', async () => {
+            let epochBefore = await staking.currentEpoch();
+            await staking.connect(deployer).pushBackEpoch0(THIRTY_DAYS)
+            let epochAfter = await staking.currentEpoch();
+
+            expect(epochAfter.endTime).to.equal(+epochBefore.endTime + +THIRTY_DAYS);
+        });
+    });
+
     describe("updateEpochLength", () => {
         it('should NOT let non owner address to update epoch length', async () => {
             await expect(staking.connect(user).updateEpochLength(THIRTY_DAYS)).to.be.revertedWith("NotOwner()");
@@ -324,7 +356,6 @@ describe("PDT Staking", () => {
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [86410]);
             await network.provider.send("evm_mine");
-
             await staking.distribute();
 
             /// EPOCH 1 ///
