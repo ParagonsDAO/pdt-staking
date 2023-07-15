@@ -1,4 +1,10 @@
 {
+  "scripts": {
+    "test": "hardhat test",
+    "deploy": "hardhat deploy",
+    "verify": "hardhat etherscan-verify",
+    "abi": "hardhat export-abi"
+  },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.0",
     "@types/sinon-chai": "^3.2.3",
