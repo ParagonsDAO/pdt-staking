@@ -1,0 +1,13 @@
+{
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.0.0",
+    "@types/sinon-chai": "^3.2.3",
+    "ethereum-waffle": "*",
+    "hardhat": "^2.17.0"
+  },
+  "dependencies": {
+    "@nomiclabs/hardhat-waffle": "^2.0.6",
+    "@openzeppelin/contracts": "^4.9.2",
+    "chai": "^4.3.7"
+  }
+}
