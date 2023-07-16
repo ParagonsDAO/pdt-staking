@@ -21,6 +21,7 @@
     },
     "dependencies": {
         "@flipsidecrypto/sdk": "^2.0.0",
+        "@nomicfoundation/hardhat-ethers": "^3.0.4",
         "@nomiclabs/hardhat-waffle": "^2.0.6",
         "@openzeppelin/contracts": "^4.9.2",
         "@prisma/client": "^5.0.0",
