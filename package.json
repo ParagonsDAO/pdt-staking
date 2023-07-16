@@ -3,7 +3,8 @@
         "test": "hardhat test",
         "deploy": "hardhat deploy",
         "verify": "hardhat etherscan-verify",
-        "get_all_events": "hardhat run scripts/get_all_events.ts",
+        "fetch": "hardhat run scripts/get_all_events.ts",
+        "simulate": "hardhat run scripts/simulate_all_events.ts",
         "abi": "hardhat export-abi",
         "up": "docker-compose up -d",
         "migrate": "prisma migrate dev"
