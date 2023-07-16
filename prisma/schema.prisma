@@ -1,0 +1,37 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Transaction {
+  tx_hash String @id @unique
+
+  block_number              Int
+  block_timestamp           DateTime
+  block_hash                String
+  nonce                     Int
+  position                  Int
+  origin_function_signature String
+  from_address              String
+  to_address                String
+  eth_value                 Float
+  tx_fee                    Float
+  gas_price                 Float
+  gas_limit                 Int
+  gas_used                  Int
+  cumulative_gas_used       Int
+  input_data                String
+  status                    String
+  effective_gas_price       Float
+  max_fee_per_gas           Float?
+  max_priority_fee_per_gas  Float?
+  r                         String
+  s                         String
+  v                         String
+  tx_type                   Int
+  chain_id                  Int
+}
