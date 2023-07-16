@@ -1,7 +1,8 @@
+import type EthersT from "ethers";
 import { PrismaClient, Transaction } from "@prisma/client";
 import dotenv from "dotenv";
-import type EthersT from "ethers";
 const { ethers } = require("hardhat");
+const StakingABI = require("../abis/pdtStaking.json");
 dotenv.config();
 
 const prisma = new PrismaClient();
@@ -24,7 +25,7 @@ const getFakeSigners = (txns: Transaction[]) => {
 
 async function main() {
     const txns = await prisma.transaction.findMany({});
-    const bindings = getFakeSigners(txns);
+    // const bindings = getFakeSigners(txns);
 
     const [deployer] = await ethers.getSigners();
 
@@ -43,7 +44,14 @@ async function main() {
         deployer.address
     );
 
-    console.log(txns, bindings);
+    console.log(txns);
+    let iface = new ethers.utils.Interface(StakingABI);
+    let parsed = iface.parseTransaction({ data: txns[0].input_data });
+    console.log(parsed);
+    // const abiCoder = new ethers.utils.AbiCoder();
+    // const [t] = txns;
+    // const r = abiCoder.decode(StakingABI, t.input_data);
+    // console.log(r);
 }
 
 main()
