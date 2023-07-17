@@ -1,7 +1,7 @@
 import type EthersT from "ethers";
 import { PrismaClient, Transaction } from "@prisma/client";
 import dotenv from "dotenv";
-const { ethers } = require("hardhat");
+const { ethers, network } = require("hardhat");
 dotenv.config();
 
 const StakingABI = require("../abis/pdtStaking.json");
@@ -10,6 +10,8 @@ const staingInterface = new ethers.utils.Interface(StakingABI);
 const prisma = new PrismaClient();
 const ONE_DAY = "86400";
 const SEVEN_DAY = "604800";
+
+const increaseTime = async (i: number) => network.provider.send("evm_increaseTime", [i]);
 
 const getFakeSigners = (txns: Transaction[]) => {
     const allUsers = new Set(txns.map((txn) => txn.from_address));
@@ -43,10 +45,12 @@ async function main() {
         deployer.address
     );
 
-    let txns = await prisma.transaction.findMany({});
-    txns = txns.map((i) => staingInterface.parseTransaction({ data: i.input_data }));
-    console.log(txns);
-    // const bindings = getFakeSigners(txns);
+    const txns = await prisma.transaction.findMany({});
+    const parsedTxns: EthersT.utils.TransactionDescription[] = txns.map((i) =>
+        staingInterface.parseTransaction({ data: i.input_data })
+    );
+    // Set(4) { 'stake', 'unstake', 'claim', 'distribute' }
+    // console.log(new Set(parsedTxns.map((i) => i.name)));
 }
 
 main()
