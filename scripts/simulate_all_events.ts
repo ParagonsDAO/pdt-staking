@@ -44,14 +44,9 @@ async function main() {
     );
 
     let txns = await prisma.transaction.findMany({});
-    // const bindings = getFakeSigners(txns);
-
     txns = txns.map((i) => staingInterface.parseTransaction({ data: i.input_data }));
     console.log(txns);
-    // const abiCoder = new ethers.utils.AbiCoder();
-    // const [t] = txns;
-    // const r = abiCoder.decode(StakingABI, t.input_data);
-    // console.log(r);
+    // const bindings = getFakeSigners(txns);
 }
 
 main()
