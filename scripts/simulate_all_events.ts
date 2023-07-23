@@ -49,6 +49,7 @@ async function main() {
     const parsedTxns: EthersT.utils.TransactionDescription[] = txns.map((i) =>
         staingInterface.parseTransaction({ data: i.input_data })
     );
+    console.log(txns);
     // Set(4) { 'stake', 'unstake', 'claim', 'distribute' }
     // console.log(new Set(parsedTxns.map((i) => i.name)));
 }
