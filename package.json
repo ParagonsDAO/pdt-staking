@@ -6,7 +6,6 @@
         "fetch": "hardhat run scripts/get_all_events.ts",
         "simulate": "hardhat run scripts/simulate_all_events.ts",
         "t": "hardhat run scripts/tenderly_strategy.ts",
-        "t2": "hardhat run scripts/tenderly_strategy2.ts",
         "abi": "hardhat export-abi",
         "up": "docker-compose up -d",
         "migrate": "prisma migrate dev"

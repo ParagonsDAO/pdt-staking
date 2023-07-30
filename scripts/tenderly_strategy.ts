@@ -8,6 +8,9 @@ import fs from "fs";
 
 dotenv.config();
 
+// Replace with your actual Infura RPC URL
+const infuraProvider = new ethers.providers.JsonRpcProvider(process.env.INFURA_RPC_ENDPOINT);
+
 const CONTRACT_ADDRESS = "0xE09c8a88982A85C5B76b1756ec6172d4ad2549D6";
 const CONTRACT_DEPLOYMENT_BLOCK = 15637871;
 const StakingABI = require("../abis/pdtStaking.json");
@@ -34,104 +37,39 @@ const getAllUsers = async () => {
     const res = await flipside.query.run({ sql: sql });
     return res.rows.map((i: any) => i[0]);
 };
-
-const getUserWeightAtEpoch = async (
+async function getUserWeightAtEpoch(
     address: string,
-    epochId: number
-): Promise<EthersT.BigNumber> => {
-    const [signer] = await ethers.getSigners();
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, StakingABI, signer);
-    // Parameters for your function call go here.
-    const functionParams: any[] = [address, epochId];
-    const functionName = "userWeightAtEpoch";
-    const input = contract.interface.encodeFunctionData(functionName, functionParams);
-
-    // assuming environment variables TENDERLY_USER, TENDERLY_PROJECT and TENDERLY_ACCESS_KEY are set
-    // https://docs.tenderly.co/other/platform-access/how-to-find-the-project-slug-username-and-organization-name
-    // https://docs.tenderly.co/other/platform-access/how-to-generate-api-access-tokens
-    const { TENDERLY_USER, TENDERLY_PROJECT, TENDERLY_ACCESS_KEY } = process.env;
-
-    const resp = await axios.post(
-        `https://api.tenderly.co/api/v1/account/${TENDERLY_USER}/project/${TENDERLY_PROJECT}/simulate`,
-        // the transaction
-        {
-            /* Simulation Configuration */
-            save: false, // if true simulation is saved and shows up in the dashboard
-            save_if_fails: false, // if true, reverting simulations show up in the dashboard
-            simulation_type: "full", // full or quick (full is default)
-            network_id: "1", // network to simulate on
-            // simulate transaction at this (historical) block number
-            // block_number: 16527769,
-            // simulate transaction at this index within the (historical) block
-            // transaction_index: 42,
-            /* Standard EVM Transaction object */
-            from: "0xdc6bdc37b2714ee601734cf55a05625c9e512461",
-            to: CONTRACT_ADDRESS,
-            input,
-            gas: 8000000,
-            gas_price: 0,
-            value: 0,
-        },
-        {
-            headers: {
-                "X-Access-Key": TENDERLY_ACCESS_KEY as string,
-            },
+    epochId: number,
+    retries = 5
+): Promise<EthersT.BigNumber> {
+    const maxRetries = retries;
+    let attempt = 0;
+    while (attempt < maxRetries) {
+        try {
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, StakingABI, infuraProvider);
+            const functionParams: any[] = [address, epochId];
+            const functionName = "userWeightAtEpoch";
+            const userWeight = await contract[functionName](...functionParams);
+            return userWeight;
+        } catch (error: any) {
+            console.log(
+                `Error in getUserWeightAtEpoch: ${error.message}, retrying... (${
+                    attempt + 1
+                }/${maxRetries})`
+            );
+            attempt++;
         }
-    );
-
-    const transaction = resp.data.transaction;
-    const callTrace = transaction.transaction_info.call_trace;
-    const stringValue = callTrace.decoded_output[0].value;
-    const value = ethers.BigNumber.from(stringValue);
-    return value;
-};
-
+    }
+    throw new Error(`Failed to get user weight at epoch after ${maxRetries} retries.`);
+}
 const getContractWeightAtEpoch = async (epochId: number): Promise<EthersT.BigNumber> => {
-    const [signer] = await ethers.getSigners();
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, StakingABI, signer);
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, StakingABI, infuraProvider);
     // Parameters for your function call go here.
     const functionParams: any[] = [epochId];
     const functionName = "contractWeightAtEpoch";
-    const input = contract.interface.encodeFunctionData(functionName, functionParams);
+    const contractWeight = await contract[functionName](...functionParams);
 
-    // assuming environment variables TENDERLY_USER, TENDERLY_PROJECT and TENDERLY_ACCESS_KEY are set
-    // https://docs.tenderly.co/other/platform-access/how-to-find-the-project-slug-username-and-organization-name
-    // https://docs.tenderly.co/other/platform-access/how-to-generate-api-access-tokens
-    const { TENDERLY_USER, TENDERLY_PROJECT, TENDERLY_ACCESS_KEY } = process.env;
-
-    const resp = await axios.post(
-        `https://api.tenderly.co/api/v1/account/${TENDERLY_USER}/project/${TENDERLY_PROJECT}/simulate`,
-        // the transaction
-        {
-            /* Simulation Configuration */
-            save: false, // if true simulation is saved and shows up in the dashboard
-            save_if_fails: false, // if true, reverting simulations show up in the dashboard
-            simulation_type: "full", // full or quick (full is default)
-            network_id: "1", // network to simulate on
-            // simulate transaction at this (historical) block number
-            // block_number: 16527769,
-            // simulate transaction at this index within the (historical) block
-            // transaction_index: 42,
-            /* Standard EVM Transaction object */
-            from: "0xdc6bdc37b2714ee601734cf55a05625c9e512461",
-            to: CONTRACT_ADDRESS,
-            input,
-            gas: 8000000,
-            gas_price: 0,
-            value: 0,
-        },
-        {
-            headers: {
-                "X-Access-Key": TENDERLY_ACCESS_KEY as string,
-            },
-        }
-    );
-
-    const transaction = resp.data.transaction;
-    const callTrace = transaction.transaction_info.call_trace;
-    const stringValue = callTrace.decoded_output[0].value;
-    const value = ethers.BigNumber.from(stringValue);
-    return value;
+    return contractWeight;
 };
 
 async function main() {
@@ -145,7 +83,7 @@ async function main() {
     for (const epochId of epochsToCheck) {
         console.log(`Epoch ${epochId}`);
         const contractWeight = await getContractWeightAtEpoch(epochId);
-        for (const user of allUsers) {
+        const promises = allUsers.map(async (user: string) => {
             const weight = await getUserWeightAtEpoch(user, epochId);
             console.log(
                 `User ${user} has weight ${weight} and contract has weight ${contractWeight}`
@@ -154,7 +92,9 @@ async function main() {
 
             if (!contractOwes[user]) contractOwes[user] = ethers.BigNumber.from(0);
             contractOwes[user] = contractOwes[user].add(fundsOweThisEpoch);
-        }
+        });
+
+        await Promise.all(promises);
     }
 
     const csv: string[] = [];
@@ -163,7 +103,7 @@ async function main() {
         csv.push(`${user},${contractOwesInEther}`);
     }
     console.log(csv.join("\n"));
-    fs.writeFileSync("scripts/contract_owes.csv", csv.join("\n"));
+    fs.writeFileSync("scripts/contract_owes2.csv", csv.join("\n"));
 }
 
 main()
