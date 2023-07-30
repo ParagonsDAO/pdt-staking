@@ -5,9 +5,7 @@
         "verify": "hardhat etherscan-verify",
         "fetch": "hardhat run scripts/get_all_events.ts",
         "simulate": "hardhat run scripts/simulate_all_events.ts",
-        "t": "hardhat run scripts/tenderly_strategy.ts",
-        "abi": "hardhat export-abi",
-        "up": "docker-compose up -d",
+        "jf": "hardhat run scripts/julyfix.ts",
         "migrate": "prisma migrate dev"
     },
     "devDependencies": {
@@ -16,7 +14,6 @@
         "@types/sinon-chai": "^3.2.3",
         "ethereum-waffle": "*",
         "hardhat": "^2.17.0",
-        "prisma": "^5.0.0",
         "ts-node": "^10.9.1",
         "typescript": "^5.1.6"
     },
@@ -25,7 +22,6 @@
         "@nomicfoundation/hardhat-ethers": "^3.0.4",
         "@nomiclabs/hardhat-waffle": "^2.0.6",
         "@openzeppelin/contracts": "^4.9.2",
-        "@prisma/client": "^5.0.0",
         "chai": "^4.3.7",
         "dotenv": "^16.3.1"
     }
