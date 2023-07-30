@@ -2,17 +2,20 @@ import axios from "axios";
 import * as dotenv from "dotenv";
 const { ethers } = require("hardhat");
 const { Flipside } = require("@flipsidecrypto/sdk");
+import type EthersT from "ethers";
+// const fs = require("fs");÷
+import fs from "fs";
 
 dotenv.config();
 
 const CONTRACT_ADDRESS = "0xE09c8a88982A85C5B76b1756ec6172d4ad2549D6";
 const CONTRACT_DEPLOYMENT_BLOCK = 15637871;
 const StakingABI = require("../abis/pdtStaking.json");
-const FUNDING: { [i: number]: number } = {
-    1: 52173,
-    2: 52173,
-    3: 34782,
-    4: 34782,
+const FUNDING: { [i: number]: EthersT.BigNumber } = {
+    1: ethers.utils.parseUnits("52173"),
+    2: ethers.utils.parseUnits("52173"),
+    3: ethers.utils.parseUnits("34782"),
+    4: ethers.utils.parseUnits("34782"),
 };
 
 const getAllUsers = async () => {
@@ -32,7 +35,10 @@ const getAllUsers = async () => {
     return res.rows.map((i: any) => i[0]);
 };
 
-const getUserWeightAtEpoch = async (address: string, epochId: number) => {
+const getUserWeightAtEpoch = async (
+    address: string,
+    epochId: number
+): Promise<EthersT.BigNumber> => {
     const [signer] = await ethers.getSigners();
     const contract = new ethers.Contract(CONTRACT_ADDRESS, StakingABI, signer);
     // Parameters for your function call go here.
@@ -75,10 +81,12 @@ const getUserWeightAtEpoch = async (address: string, epochId: number) => {
 
     const transaction = resp.data.transaction;
     const callTrace = transaction.transaction_info.call_trace;
-    return callTrace.decoded_output[0].value;
+    const stringValue = callTrace.decoded_output[0].value;
+    const value = ethers.BigNumber.from(stringValue);
+    return value;
 };
 
-const getContractWeightAtEpoch = async (epochId: number) => {
+const getContractWeightAtEpoch = async (epochId: number): Promise<EthersT.BigNumber> => {
     const [signer] = await ethers.getSigners();
     const contract = new ethers.Contract(CONTRACT_ADDRESS, StakingABI, signer);
     // Parameters for your function call go here.
@@ -121,28 +129,41 @@ const getContractWeightAtEpoch = async (epochId: number) => {
 
     const transaction = resp.data.transaction;
     const callTrace = transaction.transaction_info.call_trace;
-    return callTrace.decoded_output[0].value;
+    const stringValue = callTrace.decoded_output[0].value;
+    const value = ethers.BigNumber.from(stringValue);
+    return value;
 };
 
 async function main() {
-    // const allUsers = await getAllUsers();
-    const allUsers = ["0xE90b420A71e16376260f9e733da6311D9430a7Ec"];
+    const allUsers = await getAllUsers();
+    // const allUsers = ["0xE90b420A71e16376260f9e733da6311D9430a7Ec"];
     const epochsToCheck = [1, 2, 3, 4];
+
+    const contractOwes: { [i: string]: EthersT.BigNumber } = {};
     console.log(`Found ${allUsers.length} users`);
 
     for (const epochId of epochsToCheck) {
         console.log(`Epoch ${epochId}`);
+        const contractWeight = await getContractWeightAtEpoch(epochId);
         for (const user of allUsers) {
             const weight = await getUserWeightAtEpoch(user, epochId);
-            const contractWeight = await getContractWeightAtEpoch(epochId);
             console.log(
                 `User ${user} has weight ${weight} and contract has weight ${contractWeight}`
             );
+            const fundsOweThisEpoch = FUNDING[epochId].mul(weight).div(contractWeight);
 
-            const FUNDS = (FUNDING[epochId] * weight) / contractWeight;
-            console.log(FUNDS);
+            if (!contractOwes[user]) contractOwes[user] = ethers.BigNumber.from(0);
+            contractOwes[user] = contractOwes[user].add(fundsOweThisEpoch);
         }
     }
+
+    const csv: string[] = [];
+    for (const user of Object.keys(contractOwes)) {
+        const contractOwesInEther = ethers.utils.formatEther(contractOwes[user]);
+        csv.push(`${user},${contractOwesInEther}`);
+    }
+    console.log(csv.join("\n"));
+    fs.writeFileSync("scripts/contract_owes.csv", csv.join("\n"));
 }
 
 main()
