@@ -1,8 +1,5 @@
-import assert from "assert";
-import axios from "axios";
 import * as dotenv from "dotenv";
 const { ethers } = require("hardhat");
-const { Flipside } = require("@flipsidecrypto/sdk");
 import type EthersT from "ethers";
 import fs from "fs";
 
@@ -92,7 +89,6 @@ async function main() {
     const epochsToCheck = [5];
 
     const contractOwes: { [i: string]: EthersT.BigNumber } = {};
-
     for (const epochId of epochsToCheck) {
         console.log(`Epoch ${epochId}`);
         const contractWeight = await getContractWeightAtEpoch(epochId);
@@ -105,8 +101,10 @@ async function main() {
             const fundsOweThisEpoch = FUNDING[epochId].mul(userWeight).div(contractWeight);
 
             totalUserWeight = totalUserWeight.add(userWeight);
-            if (!contractOwes[user]) contractOwes[user] = ethers.BigNumber.from(0);
-            contractOwes[user] = contractOwes[user].add(fundsOweThisEpoch);
+            if (fundsOweThisEpoch.gt(0)) {
+                if (!contractOwes[user]) contractOwes[user] = ethers.BigNumber.from(0);
+                contractOwes[user] = contractOwes[user].add(fundsOweThisEpoch);
+            }
         });
 
         await Promise.all(promises);
