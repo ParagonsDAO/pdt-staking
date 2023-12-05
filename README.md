@@ -10,3 +10,9 @@ You can find the audits below :
 CertiK - https://pub-219b30570f3a4406a348a79b73b8c1b5.r2.dev/staking-CertiK.pdf
 
 Pechshield - https://pub-219b30570f3a4406a348a79b73b8c1b5.r2.dev/staking-PeckShield.pdf
+
+## Immunefi Bug Bounty
+
+ParagonsDAO hosts a bug bounty on Immunefi at this address https://immunefi.com/bounty/paragonsdao/. 
+
+If you've found a vulnerability on this contract, it must be submitted through Immunefi's platform. See the bounty page for more details on accepted vulnerabilities, payout amounts, and rules of participation.
