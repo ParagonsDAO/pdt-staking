@@ -1,5 +1,6 @@
-const { ethers } = require("hardhat");
-const { expect } = require("chai");
+import { ethers } from "hardhat";
+import { expect } from "chai";
+import "@nomicfoundation/hardhat-chai-matchers";
 const { isCallTrace } = require("hardhat/internal/hardhat-network/stack-traces/message-trace");
 
 describe("PDT Staking", () => {
@@ -541,7 +542,7 @@ describe("PDT Staking", () => {
             await network.provider.send("evm_mine");
             await network.provider.send("evm_increaseTime", [129410]);
             await network.provider.send("evm_mine");
-            
+
             await staking.distribute();
 
             /// EPOCH 3 ///
@@ -851,7 +852,7 @@ describe("PDT Staking", () => {
             await staking.distribute();
 
             /// EPOCH 3 ///
-            const additionalWeight = ONE_THOUSAND * (1/30);
+            const additionalWeight = ONE_THOUSAND * (1 / 30);
             expect(await staking.userWeightAtEpoch(user.address, '2') - additionalWeight).to.equal(+ONE_THOUSAND);
         });
 
@@ -937,7 +938,7 @@ describe("PDT Staking", () => {
             await network.provider.send("evm_mine");
 
             await staking.distribute();
-            
+
             /// EPOCH 3 ///
             const sumOfUserWeight =
                 +(await staking.userTotalWeight(deployer.address)).toString() +
