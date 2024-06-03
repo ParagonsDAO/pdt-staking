@@ -19,7 +19,10 @@ interface IPDTStakingV2 {
      * @param previousEpochLength Previous length of epochs
      * @param newEpochLength New length of epochs
      */
-    event EpochLengthUpdated(uint256 indexed previousEpochLength, uint256 indexed newEpochLength);
+    event EpochLengthUpdated(
+        uint256 indexed previousEpochLength,
+        uint256 indexed newEpochLength
+    );
 
     /**
      * @notice Emitted upon address staking
@@ -27,7 +30,11 @@ interface IPDTStakingV2 {
      * @param newStakeAmount New stake amount of `to`
      * @param newWeightAmount New weight amount of `to`
      */
-    event Staked(address to, uint256 indexed newStakeAmount, uint256 indexed newWeightAmount);
+    event Staked(
+        address to,
+        uint256 indexed newStakeAmount,
+        uint256 indexed newWeightAmount
+    );
 
     /**
      * @notice Emitted upon user unstaking
@@ -42,7 +49,11 @@ interface IPDTStakingV2 {
      * @param epochsClaimed Array of epochs claimed
      * @param claimed Amount claimed
      */
-    event Claimed(address staker, uint256[] indexed epochsClaimed, uint256 indexed claimed);
+    event Claimed(
+        address staker,
+        uint256[] indexed epochsClaimed,
+        uint256 indexed claimed
+    );
 
     /// ERRORS ///
 
@@ -65,11 +76,6 @@ interface IPDTStakingV2 {
      * @notice Error for if unstaking when nothing is staked
      */
     error NothingStaked();
-
-    /**
-     * @notice Error for if not owner
-     */
-    error NotOwner();
 
     /**
      * @notice Error for if zero address
