@@ -12,3 +12,7 @@ docs/
 
 # Dotenv file
 .env
+
+# Forge installed libs
+lib/forge-std
+lib/openzeppelin-contracts
