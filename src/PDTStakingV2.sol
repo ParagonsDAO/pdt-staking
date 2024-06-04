@@ -131,8 +131,8 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      * @param _amount Amount of PDT to stake
      */
     function stake(address _to, uint256 _amount) external nonReentrant {
-        if (IERC20(pdt).balanceOf(msg.sender) < _amount)
-            revert MoreThanBalance();
+        require(_amount > 0, "Invalid zero stake");
+
         IERC20(pdt).safeTransferFrom(msg.sender, address(this), _amount);
 
         _distribute();

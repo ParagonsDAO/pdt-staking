@@ -68,19 +68,9 @@ interface IPDTStakingV2 {
     error ClaimedUpToEpoch();
 
     /**
-     * @notice Error for if staking more than balance
-     */
-    error MoreThanBalance();
-
-    /**
      * @notice Error for if unstaking when nothing is staked
      */
     error NothingStaked();
-
-    /**
-     * @notice Error for if zero address
-     */
-    error ZeroAddress();
 
     /**
      * @notice Error for if after epoch 0
