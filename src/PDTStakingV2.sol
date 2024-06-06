@@ -6,9 +6,6 @@ import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/Reentrancy
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {IPDTStakingV2} from "./interfaces/IPDTStakingV2.sol";
 
-// Uncomment this line to use console.log
-// import "hardhat/console.sol";
-
 /**
  * @title PDT Staking v2
  * @notice Contract that allows users to stake PDT
@@ -19,90 +16,104 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
     /// STATE VARIABLES ///
 
-    /// @notice The duration to double weight in seconds
-    uint256 public immutable timeToDouble;
+    /**
+     * Epoch Configuration
+     */
+
     /// @notice Current epoch id
-    uint256 public epochId;
+    uint256 public currentEpochId;
+
     /// @notice The duration of each epoch in seconds
     uint256 public epochLength;
-    /// @notice The time of last interaction with contract in seconds
-    uint256 public lastInteraction;
-    /// @notice Total amount of staked PDT
+
+    /// @notice Epoch id to epoch details
+    mapping(uint256 => Epoch) public epoch;
+
+    /**
+     * Staking Metrics
+     */
+
+    /// @notice Total amount of staked PDT within contract
     uint256 public totalStaked;
 
-    /// @notice Total weight of contract
-    uint256 internal _contractWeight;
-    /// @notice The amount of unclaimed rewards
-    uint256 public unclaimedRewards;
-
-    /// @notice Current epoch
-    Epoch public currentEpoch;
-
-    /// @notice The address of PDT
+    /// @notice The immutable address of PDT token utilized for staking
     address public immutable pdt;
-    /// @notice The address of prime
-    address public immutable prime;
+
+    /**
+     * Reward Tokens
+     */
+
+    /// @notice Dynamic array to store reward token addresses
+    address[] public rewardTokenList;
+
+    /// @notice Reward token to its info
+    mapping(address => RewardTokenInfo) public rewardTokenInfo;
+
+    /// @notice Reward token to its unclaimed amount
+    mapping(address => uint256) public unclaimedRewards;
+
+    /// @notice Maps each reward token to their respective rewards allocation for every epoch
+    mapping(address => mapping(uint256 => uint256))
+        public totalRewardsToDistribute;
+
+    /// @notice Maps each reward token to their respective claimed amount for every epoch
+    mapping(address => mapping(uint256 => uint256)) public totalRewardsClaimed;
+
+    /**
+     * User Information
+     */
 
     /// @notice Account to the claim reward status of certain epoch id
     mapping(address => mapping(uint256 => bool)) public userClaimedEpoch;
+
     /// @notice Account to its weight at a certain epoch
     mapping(address => mapping(uint256 => uint256)) internal _userWeightAtEpoch;
+
     /// @notice Account to the last interacted epoch id
     mapping(address => uint256) public epochLeftOff;
+
     /// @notice Account to the last claimed epoch id
     mapping(address => uint256) public claimLeftOff;
-    /// @notice Epoch id to epoch details
-    mapping(uint256 => Epoch) public epoch;
-    /// @notice Account to Stake details
-    mapping(address => Stake) public stakeDetails;
+
+    /// @notice Account to the amount of staked tokens
+    mapping(address => uint256) public stakesByUser;
 
     /// CONSTRUCTOR ///
 
     /**
-     * @param _timeToDouble The duration to double weight in seconds
      * @param _epochLength The duration of each epoch in seconds
      * @param _firstEpochStartIn The duration of seconds the first epoch will starts in
      * @param _pdt The address of PDT token
-     * @param _prime The address of reward token
      * @param _initialOwner The address of initial owner
      */
     constructor(
-        uint256 _timeToDouble,
         uint256 _epochLength,
         uint256 _firstEpochStartIn,
         address _pdt,
-        address _prime,
         address _initialOwner
     ) Ownable(_initialOwner) {
-        require(_timeToDouble > 0, "Zero timeToDouble");
         require(_epochLength > 0, "Zero epochLength");
         require(_firstEpochStartIn > 0, "Zero firstEpochStartIn");
         require(_pdt != address(0), "Zero Address: PDT");
-        require(_prime != address(0), "Zero Address: PRIME");
 
-        timeToDouble = _timeToDouble;
         epochLength = _epochLength;
-        currentEpoch.endTime = block.timestamp + _firstEpochStartIn;
         epoch[0].endTime = block.timestamp + _firstEpochStartIn;
-        currentEpoch.startTime = block.timestamp;
         epoch[0].startTime = block.timestamp;
         pdt = _pdt;
-        prime = _prime;
     }
 
     /// OWNER FUNCTION ///
 
     /**
      * @notice Push back epoch 0, used in case PRIME can not be transferred at current end time
-     * @param _timeToPushBack The amount of seconds to push epoch 0 back
+     * @param _timeToPushBack The number of seconds to push epoch 0 back
      */
     function pushBackEpoch0(uint256 _timeToPushBack) external onlyOwner {
-        if (epochId != 0) revert AfterEpoch0();
+        if (currentEpochId != 0) revert AfterEpoch0();
 
-        currentEpoch.endTime += _timeToPushBack;
         epoch[0].endTime += _timeToPushBack;
 
-        emit Epoch0PushedBack(currentEpoch.endTime);
+        emit PushBackEpoch0(epoch[0].endTime);
     }
 
     /**
@@ -110,10 +121,53 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      * @param _epochLength New epoch length in seconds
      */
     function updateEpochLength(uint256 _epochLength) external onlyOwner {
-        uint256 previousEpochLength_ = epochLength;
+        uint256 previousEpochLength = epochLength;
         epochLength = _epochLength;
 
-        emit EpochLengthUpdated(previousEpochLength_, _epochLength);
+        emit UpdateEpochLength(previousEpochLength, _epochLength);
+    }
+
+    /**
+     * @notice Add or update reward token info of the contract
+     * @param _rewardToken The address of reward token
+     * @param _isActive Indicates that if the `_rewardToken` will be active/inactive reward token of the contract
+     */
+    function upsertRewardToken(
+        address _rewardToken,
+        bool _isActive
+    ) external onlyOwner {
+        require(_rewardToken != address(0), "Non-zero reward token address");
+
+        uint256 numOfRewardTokens = rewardTokenList.length;
+
+        for (uint256 i = 0; i < numOfRewardTokens; ++i) {
+            if (rewardTokenList[i] == _rewardToken) {
+                RewardTokenInfo memory _rewardTokenInfo = rewardTokenInfo[
+                    _rewardToken
+                ];
+                if (_rewardTokenInfo.isActive != _isActive) {
+                    _rewardTokenInfo.isActive = _isActive;
+                    rewardTokenInfo[_rewardToken] = _rewardTokenInfo;
+
+                    emit UpsertRewardToken(
+                        currentEpochId,
+                        _rewardToken,
+                        _isActive
+                    );
+                }
+                return;
+            }
+        }
+
+        // _rewardToken not found in rewardTokenList
+        rewardTokenList.push(_rewardToken);
+
+        RewardTokenInfo memory _tokenInfo;
+        _tokenInfo.isActive = _isActive;
+        _tokenInfo.index = rewardTokenList.length;
+        rewardTokenInfo[_rewardToken] = _tokenInfo;
+
+        emit UpsertRewardToken(currentEpochId, _rewardToken, _isActive);
     }
 
     /// PUBLIC FUNCTIONS ///
@@ -131,35 +185,17 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      * @param _amount Amount of PDT to stake
      */
     function stake(address _to, uint256 _amount) external nonReentrant {
-        require(_amount > 0, "Invalid zero stake");
-
-        IERC20(pdt).safeTransferFrom(msg.sender, address(this), _amount);
+        require(_amount > 0, "Non-zero stake");
 
         _distribute();
         _setUserWeightAtEpoch(_to);
-        _adjustContractWeight(true, _amount);
 
         totalStaked += _amount;
+        stakesByUser[_to] += _amount;
 
-        Stake memory _stake = stakeDetails[_to];
+        IERC20(pdt).safeTransferFrom(msg.sender, address(this), _amount);
 
-        if (_stake.amountStaked > 0) {
-            uint256 _additionalWeight = _weightIncreaseSinceInteraction(
-                block.timestamp,
-                _stake.lastInteraction,
-                _stake.amountStaked
-            );
-            _stake.weightAtLastInteraction += (_additionalWeight + _amount);
-        } else {
-            _stake.weightAtLastInteraction = _amount;
-        }
-
-        _stake.amountStaked += _amount;
-        _stake.lastInteraction = block.timestamp;
-
-        stakeDetails[_to] = _stake;
-
-        emit Staked(_to, _stake.amountStaked, _stake.weightAtLastInteraction);
+        emit Stake(_to, _amount);
     }
 
     /**
@@ -167,109 +203,173 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      * @param _to Address that will receive PDT unstaked
      */
     function unstake(address _to) external nonReentrant {
-        Stake memory _stake = stakeDetails[msg.sender];
+        uint256 amountStaked = stakesByUser[_to];
 
-        uint256 _stakedAmount = _stake.amountStaked;
-
-        if (_stakedAmount == 0) revert NothingStaked();
+        if (amountStaked == 0) revert NothingStaked();
 
         _distribute();
         _setUserWeightAtEpoch(msg.sender);
-        _adjustContractWeight(false, _stakedAmount);
 
-        totalStaked -= _stakedAmount;
+        totalStaked -= amountStaked;
+        stakesByUser[_to] = 0;
 
-        _stake.amountStaked = 0;
-        _stake.lastInteraction = block.timestamp;
-        _stake.weightAtLastInteraction = 0;
+        IERC20(pdt).safeTransfer(_to, amountStaked);
 
-        stakeDetails[msg.sender] = _stake;
-
-        IERC20(pdt).safeTransfer(_to, _stakedAmount);
-
-        emit Unstaked(msg.sender, _stakedAmount);
+        emit Unstake(msg.sender, amountStaked);
     }
 
     /**
-     * @notice Claims all pending rewards tokens for msg.sender
+     * @notice Claims all pending rewards for msg.sender
      * @param _to Address to send rewards to
      */
     function claim(address _to) external nonReentrant {
         _setUserWeightAtEpoch(msg.sender);
 
-        uint256 _pendingRewards;
         uint256 _claimLeftOff = claimLeftOff[msg.sender];
 
-        if (_claimLeftOff == epochId) revert ClaimedUpToEpoch();
+        if (_claimLeftOff == currentEpochId) revert ClaimedUpToEpoch();
 
-        for (_claimLeftOff; _claimLeftOff < epochId; ++_claimLeftOff) {
+        (
+            address[] memory _activeRewardTokenList,
+            uint256 _tokenListSize
+        ) = getActiveRewardTokenList();
+
+        uint256[] memory _pendingRewards = new uint256[](_tokenListSize);
+
+        for (_claimLeftOff; _claimLeftOff < currentEpochId; ++_claimLeftOff) {
+            uint256 _contractWeightAtEpoch = contractWeightAtEpoch(
+                _claimLeftOff
+            );
             if (
                 !userClaimedEpoch[msg.sender][_claimLeftOff] &&
-                contractWeightAtEpoch(_claimLeftOff) > 0
+                _contractWeightAtEpoch > 0
             ) {
                 userClaimedEpoch[msg.sender][_claimLeftOff] = true;
-                Epoch memory _epoch = epoch[_claimLeftOff];
                 uint256 _weightAtEpoch = _userWeightAtEpoch[msg.sender][
                     _claimLeftOff
                 ];
 
-                uint256 _epochRewards = (_epoch.totalToDistribute *
-                    _weightAtEpoch) / contractWeightAtEpoch(_claimLeftOff);
-                if (
-                    _epoch.totalClaimed + _epochRewards >
-                    _epoch.totalToDistribute
+                for (
+                    uint256 _rewardTokenIndex;
+                    _rewardTokenIndex < _tokenListSize;
+                    ++_rewardTokenIndex
                 ) {
-                    _epochRewards =
-                        _epoch.totalToDistribute -
-                        _epoch.totalClaimed;
-                }
+                    address _rewardToken = _activeRewardTokenList[
+                        _rewardTokenIndex
+                    ];
 
-                _pendingRewards += _epochRewards;
-                epoch[_claimLeftOff].totalClaimed += _epochRewards;
+                    uint256 _totalRewardsToDistributeAtEpoch = totalRewardsToDistribute[
+                            _rewardToken
+                        ][_claimLeftOff];
+                    uint256 _totalRewardsClaimedAtEpoch = totalRewardsClaimed[
+                        _rewardToken
+                    ][_claimLeftOff];
+                    uint256 _epochRewards = (_totalRewardsToDistributeAtEpoch *
+                        _weightAtEpoch) / _contractWeightAtEpoch;
+                    if (
+                        _totalRewardsClaimedAtEpoch + _epochRewards >
+                        _totalRewardsToDistributeAtEpoch
+                    ) {
+                        _epochRewards =
+                            _totalRewardsToDistributeAtEpoch -
+                            _totalRewardsClaimedAtEpoch;
+                    }
+
+                    _pendingRewards[_rewardTokenIndex] += _epochRewards;
+
+                    totalRewardsClaimed[_rewardToken][
+                        _claimLeftOff
+                    ] += _epochRewards;
+                }
             }
         }
 
-        claimLeftOff[msg.sender] = epochId;
-        unclaimedRewards -= _pendingRewards;
-        IERC20(prime).safeTransfer(_to, _pendingRewards);
+        claimLeftOff[msg.sender] = currentEpochId;
+
+        for (
+            uint256 _rewardTokenIndex;
+            _rewardTokenIndex < _tokenListSize;
+            ++_rewardTokenIndex
+        ) {
+            address _rewardToken = _activeRewardTokenList[_rewardTokenIndex];
+
+            uint256 _pendingRewardsByToken = _pendingRewards[_rewardTokenIndex];
+            unclaimedRewards[_rewardToken] -= _pendingRewardsByToken;
+            IERC20(_rewardToken).safeTransfer(_to, _pendingRewardsByToken);
+
+            emit Claim(
+                msg.sender,
+                currentEpochId,
+                _rewardToken,
+                _pendingRewardsByToken
+            );
+        }
     }
 
     /// VIEW FUNCTIONS ///
 
     /**
-     * @notice Returns current pending rewards for next epoch
-     * @return pendingRewards_ Current pending rewards for next epoch
+     * @notice Returns active reward token addresses
+     * @return rewardTokenList_
+     * @return rewardTokenListSize_
      */
-    function pendingRewards() external view returns (uint256 pendingRewards_) {
-        return IERC20(prime).balanceOf(address(this)) - unclaimedRewards;
+    function getActiveRewardTokenList()
+        public
+        view
+        returns (
+            address[] memory rewardTokenList_,
+            uint256 rewardTokenListSize_
+        )
+    {
+        uint256 numOfTokens = rewardTokenList.length;
+        uint256 numOfActiveTokens;
+
+        for (uint256 i = 0; i < numOfTokens; ++i) {
+            address _token = rewardTokenList[i];
+
+            if (rewardTokenInfo[_token].isActive) {
+                ++numOfActiveTokens;
+            }
+        }
+
+        address[] memory _rewardTokens = new address[](numOfActiveTokens);
+        uint256 count;
+
+        for (uint256 i = 0; i < numOfTokens; ++i) {
+            address _token = rewardTokenList[i];
+
+            if (rewardTokenInfo[_token].isActive) {
+                _rewardTokens[count] = _token;
+                ++count;
+            }
+        }
+
+        rewardTokenList_ = _rewardTokens;
+        rewardTokenListSize_ = numOfActiveTokens;
     }
 
     /**
-     * @notice Returns total weight `_user` has currently
-     * @param _user Address to calculate `userWeight_` of
-     * @return userWeight_ Weight of `_user`
+     * @notice Returns current pending rewards of a specific reward token for next epoch
+     * @param _rewardToken The address of reward token to get pending reward amount of
+     * @return pendingRewards_ Current pending rewards of a specific reward token for next epoch
      */
-    function userTotalWeight(
-        address _user
-    ) public view returns (uint256 userWeight_) {
-        Stake memory _stake = stakeDetails[_user];
-        uint256 _additionalWeight = _weightIncreaseSinceInteraction(
-            block.timestamp,
-            _stake.lastInteraction,
-            _stake.amountStaked
-        );
-        userWeight_ = _additionalWeight + _stake.weightAtLastInteraction;
+    function pendingRewards(
+        address _rewardToken
+    ) external view returns (uint256 pendingRewards_) {
+        return
+            IERC20(_rewardToken).balanceOf(address(this)) -
+            unclaimedRewards[_rewardToken];
     }
 
     /**
      * @notice Returns total weight of contract at `_epochId`
      * @param _epochId Epoch to return total weight of contract for
-     * @return contractWeight_ Weight of contract at end of `_epochId`
+     * @return contractWeight_ Weight of contract at the end of `_epochId`
      */
     function contractWeightAtEpoch(
         uint256 _epochId
     ) public view returns (uint256 contractWeight_) {
-        if (epochId <= _epochId) revert InvalidEpoch();
+        if (currentEpochId <= _epochId) revert InvalidEpoch();
         return epoch[_epochId].weightAtEnd;
     }
 
@@ -277,22 +377,23 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      * @notice Returns amount `_user` has claimable for `_epochId`
      * @param _user Address to see `claimable_` for `_epochId`
      * @param _epochId Id of epoch wanting to get `claimable_` for
+     * @param _rewardToken The address of reward token to get claimable amount of
      * @return claimable_ Amount claimable
      */
     function claimAmountForEpoch(
         address _user,
-        uint256 _epochId
+        uint256 _epochId,
+        address _rewardToken
     ) external view returns (uint256 claimable_) {
-        if (epochId <= _epochId) revert InvalidEpoch();
+        if (currentEpochId <= _epochId) revert InvalidEpoch();
         if (
             userClaimedEpoch[_user][_epochId] ||
             contractWeightAtEpoch(_epochId) == 0
         ) return 0;
 
-        Epoch memory _epoch = epoch[_epochId];
-
         claimable_ =
-            (_epoch.totalToDistribute * userWeightAtEpoch(_user, _epochId)) /
+            (totalRewardsToDistribute[_rewardToken][_epochId] *
+                userWeightAtEpoch(_user, _epochId)) /
             contractWeightAtEpoch(_epochId);
     }
 
@@ -306,84 +407,20 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         address _user,
         uint256 _epochId
     ) public view returns (uint256 userWeight_) {
-        if (epochId <= _epochId) revert InvalidEpoch();
+        if (currentEpochId <= _epochId) revert InvalidEpoch();
         uint256 _epochLeftOff = epochLeftOff[_user];
-        Stake memory _stake = stakeDetails[_user];
+        uint256 amountStaked = stakesByUser[_user];
 
         if (_epochLeftOff > _epochId)
             userWeight_ = _userWeightAtEpoch[_user][_epochId];
         else {
-            Epoch memory _epoch = epoch[_epochId];
-            if (_stake.amountStaked > 0) {
-                uint256 _additionalWeight = _weightIncreaseSinceInteraction(
-                    _epoch.endTime,
-                    _stake.lastInteraction,
-                    _stake.amountStaked
-                );
-                userWeight_ =
-                    _additionalWeight +
-                    _stake.weightAtLastInteraction;
+            if (amountStaked > 0) {
+                userWeight_ = amountStaked;
             }
         }
     }
 
-    /**
-     * @notice Returns current total weight of contract
-     * @return contractWeight_ Total current weight of contract
-     */
-    function contractWeight() external view returns (uint256 contractWeight_) {
-        uint256 _weightIncrease = _weightIncreaseSinceInteraction(
-            block.timestamp,
-            lastInteraction,
-            totalStaked
-        );
-        contractWeight_ = _weightIncrease + _contractWeight;
-    }
-
-    /// INTERNAL VIEW FUNCTION ///
-
-    /**
-     * @notice Returns additional weight since `_lastInteraction` at `_timestamp`
-     * @param _timestamp Timestamp calculating on
-     * @param _lastInteraction Last interaction time
-     * @param _baseAmount Base amount of PDT to account for
-     * @return additionalWeight_ Additional weight since `_lastinteraction` at `_timestamp`
-     */
-    function _weightIncreaseSinceInteraction(
-        uint256 _timestamp,
-        uint256 _lastInteraction,
-        uint256 _baseAmount
-    ) internal view returns (uint256 additionalWeight_) {
-        uint256 _timePassed = _timestamp - _lastInteraction;
-        uint256 _multiplierReceived = (1e18 * _timePassed) / timeToDouble;
-        additionalWeight_ = (_baseAmount * _multiplierReceived) / 1e18;
-    }
-
     /// INTERNAL FUNCTIONS ///
-
-    /**
-     * @notice Adjust contract weight since last interaction
-     * @param _stake Bool if `_amount` is being staked or withdrawn
-     * @param _amount Amount of PDT being staked or withdrawn
-     */
-    function _adjustContractWeight(bool _stake, uint256 _amount) internal {
-        uint256 _weightReceivedSinceInteraction = _weightIncreaseSinceInteraction(
-                block.timestamp,
-                lastInteraction,
-                totalStaked
-            );
-        _contractWeight += _weightReceivedSinceInteraction;
-
-        if (_stake) {
-            _contractWeight += _amount;
-        } else {
-            if (userTotalWeight(msg.sender) > _contractWeight)
-                _contractWeight = 0;
-            else _contractWeight -= userTotalWeight(msg.sender);
-        }
-
-        lastInteraction = block.timestamp;
-    }
 
     /**
      * @notice Set epochs of `_user` that they left off on
@@ -392,23 +429,19 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     function _setUserWeightAtEpoch(address _user) internal {
         uint256 _epochLeftOff = epochLeftOff[_user];
 
-        if (_epochLeftOff != epochId) {
-            Stake memory _stake = stakeDetails[_user];
-            if (_stake.amountStaked > 0) {
-                for (_epochLeftOff; _epochLeftOff < epochId; ++_epochLeftOff) {
-                    Epoch memory _epoch = epoch[_epochLeftOff];
-                    uint256 _additionalWeight = _weightIncreaseSinceInteraction(
-                        _epoch.endTime,
-                        _stake.lastInteraction,
-                        _stake.amountStaked
-                    );
-                    _userWeightAtEpoch[_user][_epochLeftOff] =
-                        _additionalWeight +
-                        _stake.weightAtLastInteraction;
+        if (_epochLeftOff != currentEpochId) {
+            uint256 amountStaked = stakesByUser[_user];
+            if (amountStaked > 0) {
+                for (
+                    _epochLeftOff;
+                    _epochLeftOff < currentEpochId;
+                    ++_epochLeftOff
+                ) {
+                    _userWeightAtEpoch[_user][_epochLeftOff] = amountStaked;
                 }
             }
 
-            epochLeftOff[_user] = epochId;
+            epochLeftOff[_user] = currentEpochId;
         }
     }
 
@@ -416,27 +449,36 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      * @notice Update epoch details if time
      */
     function _distribute() internal {
-        if (block.timestamp >= currentEpoch.endTime) {
-            uint256 _additionalWeight = _weightIncreaseSinceInteraction(
-                currentEpoch.endTime,
-                lastInteraction,
-                totalStaked
-            );
-            epoch[epochId].weightAtEnd = _additionalWeight + _contractWeight;
+        Epoch memory _currentEpoch = epoch[currentEpochId];
+        if (block.timestamp >= _currentEpoch.endTime) {
+            ++currentEpochId;
 
-            ++epochId;
+            for (
+                uint256 _rewardTokenIndex;
+                _rewardTokenIndex < rewardTokenList.length;
+                ++_rewardTokenIndex
+            ) {
+                address _rewardToken = rewardTokenList[_rewardTokenIndex];
 
-            Epoch memory _epoch;
-            _epoch.totalToDistribute =
-                IERC20(prime).balanceOf(address(this)) -
-                unclaimedRewards;
-            _epoch.startTime = block.timestamp;
-            _epoch.endTime = block.timestamp + epochLength;
+                if (rewardTokenInfo[_rewardToken].isActive) {
+                    uint256 _unclaimedRewardsByToken = unclaimedRewards[
+                        _rewardToken
+                    ];
+                    uint256 _rewardTokenBalance = IERC20(_rewardToken)
+                        .balanceOf(address(this));
+                    totalRewardsToDistribute[_rewardToken][currentEpochId] =
+                        _rewardTokenBalance -
+                        _unclaimedRewardsByToken;
 
-            currentEpoch = _epoch;
-            epoch[epochId] = _epoch;
+                    unclaimedRewards[_rewardToken] = _rewardTokenBalance;
+                }
+            }
 
-            unclaimedRewards += _epoch.totalToDistribute;
+            _currentEpoch.startTime = block.timestamp;
+            _currentEpoch.endTime = block.timestamp + epochLength;
+            _currentEpoch.weightAtEnd = totalStaked;
+
+            epoch[currentEpochId] = _currentEpoch;
         }
     }
 }

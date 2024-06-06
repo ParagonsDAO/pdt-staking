@@ -12,47 +12,56 @@ interface IPDTStakingV2 {
      * @notice Emitted if epoch 0 is pushed back
      * @param newEndTime New end time of epoch 0
      */
-    event Epoch0PushedBack(uint256 indexed newEndTime);
+    event PushBackEpoch0(uint256 indexed newEndTime);
 
     /**
      * @notice Emitted if epoch length is updated
      * @param previousEpochLength Previous length of epochs
      * @param newEpochLength New length of epochs
      */
-    event EpochLengthUpdated(
+    event UpdateEpochLength(
         uint256 indexed previousEpochLength,
         uint256 indexed newEpochLength
     );
 
     /**
-     * @notice Emitted upon address staking
-     * @param to Address of who is receiving credit of stake
-     * @param newStakeAmount New stake amount of `to`
-     * @param newWeightAmount New weight amount of `to`
+     * @notice Emitted if a reward token info is added or updated
+     * @param epochId The epoch Id that the reward token info is added or updated in
+     * @param rewardToken The address of reward token to be added or updated within contract
+     * @param isActive Indicates that `rewardToken` will be an active/inactive reward token
      */
-    event Staked(
-        address to,
-        uint256 indexed newStakeAmount,
-        uint256 indexed newWeightAmount
+    event UpsertRewardToken(
+        uint256 indexed epochId,
+        address indexed rewardToken,
+        bool indexed isActive
     );
+
+    /**
+     * @notice Emitted upon user staking
+     * @param to Address of who is receiving credit of stake
+     * @param amount Stake amount of `to`
+     */
+    event Stake(address to, uint256 indexed amount);
 
     /**
      * @notice Emitted upon user unstaking
      * @param staker Address of who is unstaking
-     * @param amountUnstaked Amount `staker` unstaked
+     * @param amount Amount `staker` unstaked
      */
-    event Unstaked(address staker, uint256 indexed amountUnstaked);
+    event Unstake(address staker, uint256 indexed amount);
 
     /**
      * @notice Emitted upon staker claiming
      * @param staker Address of who claimed rewards
-     * @param epochsClaimed Array of epochs claimed
-     * @param claimed Amount claimed
+     * @param epochId Current epoch id
+     * @param rewardToken Address of claimed reward token
+     * @param amount Amount claimed
      */
-    event Claimed(
+    event Claim(
         address staker,
-        uint256[] indexed epochsClaimed,
-        uint256 indexed claimed
+        uint256 indexed epochId,
+        address indexed rewardToken,
+        uint256 indexed amount
     );
 
     /// ERRORS ///
@@ -73,6 +82,11 @@ interface IPDTStakingV2 {
     error NothingStaked();
 
     /**
+     * @notice Error for if address is zero address
+     */
+    error ZeroAddress();
+
+    /**
      * @notice Error for if after epoch 0
      */
     error AfterEpoch0();
@@ -80,30 +94,26 @@ interface IPDTStakingV2 {
     /// STRUCTS ///
 
     /**
-     * @notice Details for epoch
-     * @param totalToDistribute Total amount of token to distribute for epoch
-     * @param totalClaimed Total amount of tokens claimed from epoch
-     * @param startTime Timestamp epoch started
-     * @param endTime Timestamp epoch ends
-     * @param weightAtEnd Weight of staked tokens at end of epoch
+     * @notice Contains information about a specific staking epoch
+     * @param totalToDistribute The total number of tokens allocated for distribution during the epoch
+     * @param totalClaimed The sum of tokens that have been claimed so far from this epoch's allocation
+     * @param startTime The start time of the epoch, represented as a UNIX timestamp
+     * @param endTime The end time of the epoch, also represented as a UNIX timestamp
+     * @param weightAtEnd The cumulative weight of staked tokens at the conclusion of the epoch
      */
     struct Epoch {
-        uint256 totalToDistribute;
-        uint256 totalClaimed;
         uint256 startTime;
         uint256 endTime;
         uint256 weightAtEnd;
     }
 
     /**
-     * @notice Stake details for user
-     * @param amountStaked Amount user has staked
-     * @param lastInteraction Last timestamp user interacted
-     * @param weightAtLastInteraction Weight of stake at last interaction
+     * @notice Represents the status of a reward token within the contract
+     * @param isActive Indicates whether this token is currently active for rewarding users. If `true`, the token is used as a reward
+     * @param index The position of this reward token in the overall list of reward tokens
      */
-    struct Stake {
-        uint256 amountStaked;
-        uint256 lastInteraction;
-        uint256 weightAtLastInteraction;
+    struct RewardTokenInfo {
+        bool isActive;
+        uint256 index;
     }
 }
