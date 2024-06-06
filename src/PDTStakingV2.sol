@@ -464,6 +464,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     function _distribute() internal {
         Epoch memory _currentEpoch = epoch[currentEpochId];
         if (block.timestamp >= _currentEpoch.endTime) {
+            epoch[currentEpochId].weightAtEnd = totalStaked;
             ++currentEpochId;
 
             for (
@@ -489,7 +490,6 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
             _currentEpoch.startTime = block.timestamp;
             _currentEpoch.endTime = block.timestamp + epochLength;
-            _currentEpoch.weightAtEnd = totalStaked;
 
             epoch[currentEpochId] = _currentEpoch;
         }
