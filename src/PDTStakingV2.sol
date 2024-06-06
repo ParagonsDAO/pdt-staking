@@ -306,6 +306,19 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         }
     }
 
+    /**
+     * @notice Transfer some amount of stakes to another wallet
+     * @param _to Target wallet address for transfering stakes
+     * @param _amount The amount of stakes to transfer to `_to` address
+     */
+    function tranferStakes(address _to, uint256 _amount) external nonReentrant {
+        require(_to != address(0), "Invalid target wallet");
+        require(_amount > 0, "Zero transfer stakes");
+
+        stakesByUser[msg.sender] -= _amount;
+        stakesByUser[_to] += _amount;
+    }
+
     /// VIEW FUNCTIONS ///
 
     /**
