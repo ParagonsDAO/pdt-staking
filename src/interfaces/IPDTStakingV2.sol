@@ -53,21 +53,35 @@ interface IPDTStakingV2 {
     /**
      * @notice Emitted upon staker claiming
      * @param staker Address of who claimed rewards
-     * @param epochId Current epoch id
+     * @param currentEpochId Current epoch id
      * @param rewardToken Address of claimed reward token
      * @param amount Amount claimed
      */
     event Claim(
         address staker,
-        uint256 indexed epochId,
+        uint256 indexed currentEpochId,
         address indexed rewardToken,
         uint256 indexed amount
+    );
+
+    /**
+     * @notice Emitted upon staker transfers stakes to another user
+     * @param from The address of who is sending stakes
+     * @param to The address of who is receiving stakes
+     * @param epochId Current epoch id
+     * @param amount The amount that is transfered
+     */
+    event TransferStakes(
+        address indexed from,
+        address indexed to,
+        uint256 indexed epochId,
+        uint256 amount
     );
 
     /// ERRORS ///
 
     /**
-     * @notice Error for if epoch is invalid
+     * @notice Error for if epoch param of a function is not earlier than current epoch
      */
     error InvalidEpoch();
 
@@ -87,16 +101,19 @@ interface IPDTStakingV2 {
     error ZeroAddress();
 
     /**
-     * @notice Error for if after epoch 0
+     * @notice Error for if `pushBackEpoch0` is called after epoch 0
      */
     error AfterEpoch0();
+
+    /**
+     * @notice Error for if reward pool for the next epoch is not ready while distributing
+     */
+    error EmptyRewardPool(address rewardToken);
 
     /// STRUCTS ///
 
     /**
      * @notice Contains information about a specific staking epoch
-     * @param totalToDistribute The total number of tokens allocated for distribution during the epoch
-     * @param totalClaimed The sum of tokens that have been claimed so far from this epoch's allocation
      * @param startTime The start time of the epoch, represented as a UNIX timestamp
      * @param endTime The end time of the epoch, also represented as a UNIX timestamp
      * @param weightAtEnd The cumulative weight of staked tokens at the conclusion of the epoch
