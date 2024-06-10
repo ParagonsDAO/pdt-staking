@@ -207,13 +207,9 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         }
     }
 
-    /// PUBLIC FUNCTIONS ///
+    /// EXTERNAL FUNCTIONS ///
 
-    /**
-     * @notice Stake PDT
-     * @param _to Address that will receive credit for stake
-     * @param _amount Amount of PDT to stake
-     */
+    /// @inheritdoc IPDTStakingV2
     function stake(address _to, uint256 _amount) external nonReentrant {
         require(_amount > 0, "Non-zero stake");
         require(
@@ -231,10 +227,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         emit Stake(_to, _amount);
     }
 
-    /**
-     * @notice Unstake PDT
-     * @param _to Address that will receive PDT unstaked
-     */
+    /// @inheritdoc IPDTStakingV2
     function unstake(address _to, uint256 _amount) external nonReentrant {
         uint256 amountStaked = stakesByUser[_to];
         require(_amount <= amountStaked, "Insufficient stakes");
@@ -249,10 +242,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         emit Unstake(msg.sender, _amount);
     }
 
-    /**
-     * @notice Claims all pending rewards for msg.sender
-     * @param _to Address to send rewards to
-     */
+    /// @inheritdoc IPDTStakingV2
     function claim(address _to) external nonReentrant {
         _setUserWeightAtEpoch(msg.sender);
 
@@ -336,11 +326,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         }
     }
 
-    /**
-     * @notice Transfer some amount of stakes to another wallet
-     * @param _to Target wallet address for transfering stakes
-     * @param _amount The amount of stakes to transfer to `_to` address
-     */
+    /// @inheritdoc IPDTStakingV2
     function transferStakes(
         address _to,
         uint256 _amount

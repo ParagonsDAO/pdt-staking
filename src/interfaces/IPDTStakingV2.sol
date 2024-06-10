@@ -133,4 +133,33 @@ interface IPDTStakingV2 {
         bool isActive;
         uint256 index;
     }
+
+    /// EXTERNAL FUNCTIONS ///
+
+    /**
+     * @notice Stake PDT
+     * @param _to The address that will receive credit for stake
+     * @param _amount The amount of PDT to stake
+     */
+    function stake(address _to, uint256 _amount) external;
+
+    /**
+     * @notice Unstake PDT
+     * @param _to The address that will receive PDT unstaked
+     * @param _amount The amount of PDT to unstake
+     */
+    function unstake(address _to, uint256 _amount) external;
+
+    /**
+     * @notice Claims all pending rewards for msg.sender
+     * @param _to The address to send rewards to
+     */
+    function claim(address _to) external;
+
+    /**
+     * @notice Transfer some amount of stakes to another wallet
+     * @param _to The target wallet address for transfering stakes
+     * @param _amount The amount of stakes to transfer to `_to` address
+     */
+    function transferStakes(address _to, uint256 _amount) external;
 }
