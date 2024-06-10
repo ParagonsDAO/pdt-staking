@@ -235,19 +235,18 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      * @notice Unstake PDT
      * @param _to Address that will receive PDT unstaked
      */
-    function unstake(address _to) external nonReentrant {
+    function unstake(address _to, uint256 _amount) external nonReentrant {
         uint256 amountStaked = stakesByUser[_to];
-
-        if (amountStaked == 0) revert NothingStaked();
+        require(_amount <= amountStaked, "Insufficient stakes");
 
         _setUserWeightAtEpoch(msg.sender);
 
-        totalStaked -= amountStaked;
-        stakesByUser[_to] = 0;
+        totalStaked -= _amount;
+        stakesByUser[_to] -= _amount;
 
-        IERC20(pdt).safeTransfer(_to, amountStaked);
+        IERC20(pdt).safeTransfer(_to, _amount);
 
-        emit Unstake(msg.sender, amountStaked);
+        emit Unstake(msg.sender, _amount);
     }
 
     /**
