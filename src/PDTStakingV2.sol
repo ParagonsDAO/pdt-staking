@@ -53,8 +53,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     mapping(address => uint256) public unclaimedRewards;
 
     /// @notice Maps each reward token to their respective rewards allocation for every epoch
-    mapping(address => mapping(uint256 => uint256))
-        public totalRewardsToDistribute;
+    mapping(address => mapping(uint256 => uint256)) public totalRewardsToDistribute;
 
     /// @notice Maps each reward token to their respective claimed amount for every epoch
     mapping(address => mapping(uint256 => uint256)) public totalRewardsClaimed;
@@ -124,7 +123,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         uint256 previousEpochLength = epochLength;
         epochLength = _epochLength;
 
-        emit UpdateEpochLength(previousEpochLength, _epochLength);
+        emit UpdateEpochLength(currentEpochId, previousEpochLength, _epochLength);
     }
 
     /**
@@ -132,34 +131,29 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      * @param _rewardToken The address of reward token
      * @param _isActive Indicates that if the `_rewardToken` will be active/inactive reward token of the contract
      */
-    function upsertRewardToken(
-        address _rewardToken,
-        bool _isActive
-    ) external onlyOwner {
+    function upsertRewardToken(address _rewardToken, bool _isActive) external onlyOwner {
         require(_rewardToken != address(0), "Non-zero reward token address");
 
         uint256 numOfRewardTokens = rewardTokenList.length;
 
-        for (uint256 i = 0; i < numOfRewardTokens; ++i) {
+        for (uint256 i = 0; i < numOfRewardTokens; ) {
             if (rewardTokenList[i] == _rewardToken) {
-                RewardTokenInfo memory _rewardTokenInfo = rewardTokenInfo[
-                    _rewardToken
-                ];
+                RewardTokenInfo memory _rewardTokenInfo = rewardTokenInfo[_rewardToken];
                 if (_rewardTokenInfo.isActive != _isActive) {
                     _rewardTokenInfo.isActive = _isActive;
                     rewardTokenInfo[_rewardToken] = _rewardTokenInfo;
 
-                    emit UpsertRewardToken(
-                        currentEpochId,
-                        _rewardToken,
-                        _isActive
-                    );
+                    emit UpsertRewardToken(currentEpochId, _rewardToken, _isActive);
                 }
                 return;
             }
+
+            unchecked {
+                ++i;
+            }
         }
 
-        // _rewardToken not found in rewardTokenList
+        // If _rewardToken is not found in rewardTokenList, then add it
         rewardTokenList.push(_rewardToken);
 
         RewardTokenInfo memory _tokenInfo;
@@ -176,27 +170,28 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      */
     function distribute() external onlyOwner {
         Epoch memory _currentEpoch = epoch[currentEpochId];
+
         if (block.timestamp >= _currentEpoch.endTime) {
             epoch[currentEpochId].weightAtEnd = totalStaked;
             ++currentEpochId;
 
-            for (uint256 i; i < rewardTokenList.length; ++i) {
+            for (uint256 i; i < rewardTokenList.length; ) {
                 address _rewardToken = rewardTokenList[i];
 
                 if (rewardTokenInfo[_rewardToken].isActive) {
-                    uint256 _rewardBalance = IERC20(_rewardToken).balanceOf(
-                        address(this)
-                    );
-                    uint256 _rewardsToDistribute = _rewardBalance -
-                        unclaimedRewards[_rewardToken];
-                    if (_rewardsToDistribute == 0) {
-                        revert EmptyRewardPool(_rewardToken);
-                    }
-                    totalRewardsToDistribute[_rewardToken][
-                        currentEpochId
-                    ] = _rewardsToDistribute;
+                    uint256 _rewardBalance = IERC20(_rewardToken).balanceOf(address(this));
+                    uint256 _rewardsToDistribute = _rewardBalance - unclaimedRewards[_rewardToken];
 
+                    if (_rewardsToDistribute == 0) {
+                        revert EmptyRewardPool(_rewardToken, currentEpochId - 1);
+                    }
+
+                    totalRewardsToDistribute[_rewardToken][currentEpochId] = _rewardsToDistribute;
                     unclaimedRewards[_rewardToken] = _rewardBalance;
+                }
+
+                unchecked {
+                    ++i;
                 }
             }
 
@@ -212,10 +207,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     /// @inheritdoc IPDTStakingV2
     function stake(address _to, uint256 _amount) external nonReentrant {
         require(_amount > 0, "Non-zero stake");
-        require(
-            block.timestamp < epoch[currentEpochId].endTime,
-            "Epoch has ended"
-        );
+        require(block.timestamp < epoch[currentEpochId].endTime, "Epoch has ended");
 
         _setUserWeightAtEpoch(_to);
 
@@ -224,7 +216,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
         IERC20(pdt).safeTransferFrom(msg.sender, address(this), _amount);
 
-        emit Stake(_to, _amount);
+        emit Stake(_to, _amount, currentEpochId);
     }
 
     /// @inheritdoc IPDTStakingV2
@@ -239,13 +231,11 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
         IERC20(pdt).safeTransfer(_to, _amount);
 
-        emit Unstake(msg.sender, _amount);
+        emit Unstake(msg.sender, _amount, currentEpochId);
     }
 
     /// @inheritdoc IPDTStakingV2
     function claim(address _to) external nonReentrant {
-        _setUserWeightAtEpoch(msg.sender);
-
         uint256 _claimLeftOff = claimLeftOff[msg.sender];
 
         if (_claimLeftOff == currentEpochId) revert ClaimedUpToEpoch();
@@ -257,34 +247,29 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
         uint256[] memory _pendingRewards = new uint256[](_tokenListSize);
 
-        for (_claimLeftOff; _claimLeftOff < currentEpochId; ++_claimLeftOff) {
-            uint256 _contractWeightAtEpoch = contractWeightAtEpoch(
-                _claimLeftOff
-            );
-            if (
-                !userClaimedEpoch[msg.sender][_claimLeftOff] &&
-                _contractWeightAtEpoch > 0
-            ) {
+        for (_claimLeftOff; _claimLeftOff < currentEpochId; ) {
+            uint256 _contractWeightAtEpoch = contractWeightAtEpoch(_claimLeftOff);
+
+            if (!userClaimedEpoch[msg.sender][_claimLeftOff] && _contractWeightAtEpoch > 0) {
                 userClaimedEpoch[msg.sender][_claimLeftOff] = true;
-                uint256 _weightAtEpoch = _userWeightAtEpoch[msg.sender][
-                    _claimLeftOff
-                ];
+
+                uint256 _weightAtEpoch = _userWeightAtEpoch[msg.sender][_claimLeftOff];
 
                 if (_weightAtEpoch > 0) {
-                    for (uint256 i; i < _tokenListSize; ++i) {
+                    for (uint256 i; i < _tokenListSize; ) {
                         address _rewardToken = _activeRewardTokenList[i];
 
                         uint256 _totalRewardsToDistributeAtEpoch = totalRewardsToDistribute[
-                                _rewardToken
-                            ][_claimLeftOff];
+                            _rewardToken
+                        ][_claimLeftOff];
 
-                        uint256 _totalRewardsClaimedAtEpoch = totalRewardsClaimed[
-                                _rewardToken
-                            ][_claimLeftOff];
+                        uint256 _totalRewardsClaimedAtEpoch = totalRewardsClaimed[_rewardToken][
+                            _claimLeftOff
+                        ];
 
                         if (_totalRewardsToDistributeAtEpoch > 0) {
                             uint256 _epochRewards = (_totalRewardsToDistributeAtEpoch *
-                                    _weightAtEpoch) / _contractWeightAtEpoch;
+                                _weightAtEpoch) / _contractWeightAtEpoch;
                             if (
                                 _totalRewardsClaimedAtEpoch + _epochRewards >
                                 _totalRewardsToDistributeAtEpoch
@@ -296,18 +281,24 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
                             _pendingRewards[i] += _epochRewards;
 
-                            totalRewardsClaimed[_rewardToken][
-                                _claimLeftOff
-                            ] += _epochRewards;
+                            totalRewardsClaimed[_rewardToken][_claimLeftOff] += _epochRewards;
+                        }
+
+                        unchecked {
+                            ++i;
                         }
                     }
                 }
+            }
+
+            unchecked {
+                ++_claimLeftOff;
             }
         }
 
         claimLeftOff[msg.sender] = currentEpochId;
 
-        for (uint256 i; i < _tokenListSize; ++i) {
+        for (uint256 i; i < _tokenListSize; ) {
             address _rewardToken = _activeRewardTokenList[i];
 
             uint256 _pendingRewardsByToken = _pendingRewards[i];
@@ -316,25 +307,18 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
                 unclaimedRewards[_rewardToken] -= _pendingRewardsByToken;
                 IERC20(_rewardToken).safeTransfer(_to, _pendingRewardsByToken);
 
-                emit Claim(
-                    msg.sender,
-                    currentEpochId,
-                    _rewardToken,
-                    _pendingRewardsByToken
-                );
+                emit Claim(msg.sender, currentEpochId, _rewardToken, _pendingRewardsByToken);
+            }
+
+            unchecked {
+                ++i;
             }
         }
     }
 
     /// @inheritdoc IPDTStakingV2
-    function transferStakes(
-        address _to,
-        uint256 _amount
-    ) external nonReentrant {
-        require(
-            _to != address(0) || _to != msg.sender,
-            "Invalid target wallet"
-        );
+    function transferStakes(address _to, uint256 _amount) external nonReentrant {
+        require(_to != address(0) || _to != msg.sender, "Invalid target wallet");
         require(_amount > 0, "Zero transfer");
 
         stakesByUser[msg.sender] -= _amount;
@@ -353,31 +337,36 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     function getActiveRewardTokenList()
         public
         view
-        returns (
-            address[] memory rewardTokenList_,
-            uint256 rewardTokenListSize_
-        )
+        returns (address[] memory rewardTokenList_, uint256 rewardTokenListSize_)
     {
         uint256 numOfTokens = rewardTokenList.length;
         uint256 numOfActiveTokens;
 
-        for (uint256 i = 0; i < numOfTokens; ++i) {
+        for (uint256 i = 0; i < numOfTokens; ) {
             address _token = rewardTokenList[i];
 
             if (rewardTokenInfo[_token].isActive) {
                 ++numOfActiveTokens;
+            }
+
+            unchecked {
+                ++i;
             }
         }
 
         address[] memory _rewardTokens = new address[](numOfActiveTokens);
         uint256 count;
 
-        for (uint256 i = 0; i < numOfTokens; ++i) {
+        for (uint256 i = 0; i < numOfTokens; ) {
             address _token = rewardTokenList[i];
 
             if (rewardTokenInfo[_token].isActive) {
                 _rewardTokens[count] = _token;
                 ++count;
+            }
+
+            unchecked {
+                ++i;
             }
         }
 
@@ -390,12 +379,8 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      * @param _rewardToken The address of reward token to get pending reward amount of
      * @return pendingRewards_ Current pending rewards of a specific reward token for next epoch
      */
-    function pendingRewards(
-        address _rewardToken
-    ) external view returns (uint256 pendingRewards_) {
-        return
-            IERC20(_rewardToken).balanceOf(address(this)) -
-            unclaimedRewards[_rewardToken];
+    function pendingRewards(address _rewardToken) external view returns (uint256 pendingRewards_) {
+        return IERC20(_rewardToken).balanceOf(address(this)) - unclaimedRewards[_rewardToken];
     }
 
     /**
@@ -403,9 +388,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
      * @param _epochId Epoch to return total weight of contract for
      * @return contractWeight_ Weight of contract at the end of `_epochId`
      */
-    function contractWeightAtEpoch(
-        uint256 _epochId
-    ) public view returns (uint256 contractWeight_) {
+    function contractWeightAtEpoch(uint256 _epochId) public view returns (uint256 contractWeight_) {
         if (currentEpochId <= _epochId) revert InvalidEpoch();
         return epoch[_epochId].weightAtEnd;
     }
@@ -423,10 +406,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         address _rewardToken
     ) external view returns (uint256 claimable_) {
         if (currentEpochId <= _epochId) revert InvalidEpoch();
-        if (
-            userClaimedEpoch[_user][_epochId] ||
-            contractWeightAtEpoch(_epochId) == 0
-        ) {
+        if (userClaimedEpoch[_user][_epochId] || contractWeightAtEpoch(_epochId) == 0) {
             return 0;
         }
 
@@ -453,9 +433,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         if (_epochLeftOff > _epochId) {
             userWeight_ = _userWeightAtEpoch[_user][_epochId];
         } else {
-            if (amountStaked > 0) {
-                userWeight_ = amountStaked;
-            }
+            userWeight_ = amountStaked;
         }
     }
 
@@ -471,12 +449,12 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         if (_epochLeftOff != currentEpochId) {
             uint256 amountStaked = stakesByUser[_user];
             if (amountStaked > 0) {
-                for (
-                    _epochLeftOff;
-                    _epochLeftOff < currentEpochId;
-                    ++_epochLeftOff
-                ) {
+                for (_epochLeftOff; _epochLeftOff < currentEpochId; ) {
                     _userWeightAtEpoch[_user][_epochLeftOff] = amountStaked;
+
+                    unchecked {
+                        ++_epochLeftOff;
+                    }
                 }
             }
 

@@ -16,10 +16,12 @@ interface IPDTStakingV2 {
 
     /**
      * @notice Emitted if epoch length is updated
+     * @param epochId The epoch Id that the epoch length is updated in
      * @param previousEpochLength Previous length of epochs
      * @param newEpochLength New length of epochs
      */
     event UpdateEpochLength(
+        uint256 indexed epochId,
         uint256 indexed previousEpochLength,
         uint256 indexed newEpochLength
     );
@@ -40,15 +42,17 @@ interface IPDTStakingV2 {
      * @notice Emitted upon user staking
      * @param to Address of who is receiving credit of stake
      * @param amount Stake amount of `to`
+     * @param epochId The epoch id which staking is happened in
      */
-    event Stake(address to, uint256 indexed amount);
+    event Stake(address to, uint256 indexed amount, uint256 epochId);
 
     /**
      * @notice Emitted upon user unstaking
      * @param staker Address of who is unstaking
      * @param amount Amount `staker` unstaked
+     * @param epochId The epoch id which unstaking is happened in
      */
-    event Unstake(address staker, uint256 indexed amount);
+    event Unstake(address staker, uint256 indexed amount, uint256 epochId);
 
     /**
      * @notice Emitted upon staker claiming
@@ -107,8 +111,10 @@ interface IPDTStakingV2 {
 
     /**
      * @notice Error for if reward pool for the next epoch is not ready while distributing
+     * @param rewardToken The address of reward token to distribute
+     * @param currentEpochId The epoch id which is going to be ended
      */
-    error EmptyRewardPool(address rewardToken);
+    error EmptyRewardPool(address rewardToken, uint256 currentEpochId);
 
     /// STRUCTS ///
 
@@ -151,7 +157,8 @@ interface IPDTStakingV2 {
     function unstake(address _to, uint256 _amount) external;
 
     /**
-     * @notice Claims all pending rewards for msg.sender
+     * @notice Claims all pending rewards for msg.sender.
+     * Claiming rewards is available just once per epoch.
      * @param _to The address to send rewards to
      */
     function claim(address _to) external;

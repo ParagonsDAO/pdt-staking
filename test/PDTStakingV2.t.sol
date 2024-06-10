@@ -6,7 +6,7 @@ import {PDTStakingV2} from "../src/PDTStakingV2.sol";
 import {IPDTStakingV2} from "../src/interfaces/IPDTStakingV2.sol";
 import {MockERC20} from "../src/mocks/ERC20.sol";
 
-contract PDTStakingV2Test is Test, IPDTStakingV2 {
+abstract contract PDTStakingV2Test is Test, IPDTStakingV2 {
     PDTStakingV2 public pdtStakingV2;
     MockERC20 public pdt;
     MockERC20 public prime;
@@ -76,16 +76,12 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
      * updateEpochLength
      */
 
-    function testFuzz_updateEpochLength_NonOwnerCannotUpdate(
-        uint256 _newEpochLength
-    ) public {
+    function testFuzz_updateEpochLength_NonOwnerCannotUpdate(uint256 _newEpochLength) public {
         vm.expectRevert();
         pdtStakingV2.updateEpochLength(_newEpochLength);
     }
 
-    function testFuzz_updateEpochLength_OwnerUpdateEpochLength(
-        uint256 _newEpochLength
-    ) public {
+    function testFuzz_updateEpochLength_OwnerUpdateEpochLength(uint256 _newEpochLength) public {
         vm.startPrank(owner);
         pdtStakingV2.updateEpochLength(_newEpochLength);
         assertEq(pdtStakingV2.epochLength(), _newEpochLength);
@@ -156,7 +152,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
         vm.startPrank(staker);
         pdt.approve(address(pdtStakingV2), stakeAmount);
         vm.expectEmit();
-        emit Stake(staker, stakeAmount);
+        emit Stake(staker, stakeAmount, 0);
         pdtStakingV2.stake(staker, stakeAmount);
         vm.stopPrank();
 
@@ -180,10 +176,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
         _creditPRIMERewardPool(1);
         _moveToNextEpoch(0);
 
-        assertEq(
-            pdtStakingV2.contractWeightAtEpoch(0),
-            pdtStakingV2.userWeightAtEpoch(staker, 0)
-        );
+        assertEq(pdtStakingV2.contractWeightAtEpoch(0), pdtStakingV2.userWeightAtEpoch(staker, 0));
     }
 
     function testFuzz_stake_SumOfStakerWeightEqualsToContractWeight(
@@ -207,8 +200,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
 
         assertEq(
             pdtStakingV2.totalStaked(),
-            pdtStakingV2.stakesByUser(staker1) +
-                pdtStakingV2.stakesByUser(staker2)
+            pdtStakingV2.stakesByUser(staker1) + pdtStakingV2.stakesByUser(staker2)
         );
 
         _creditPRIMERewardPool(1);
@@ -216,8 +208,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
 
         assertEq(
             pdtStakingV2.contractWeightAtEpoch(0),
-            pdtStakingV2.userWeightAtEpoch(staker1, 0) +
-                pdtStakingV2.userWeightAtEpoch(staker2, 0)
+            pdtStakingV2.userWeightAtEpoch(staker1, 0) + pdtStakingV2.userWeightAtEpoch(staker2, 0)
         );
     }
 
@@ -249,7 +240,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
         // staker1 unstakes half in epoch 0
         vm.startPrank(staker1);
         vm.expectEmit();
-        emit Unstake(staker1, stakeAmount1 / 2);
+        emit Unstake(staker1, stakeAmount1 / 2, 0);
         pdtStakingV2.unstake(staker1, stakeAmount1 / 2);
         vm.stopPrank();
 
@@ -258,8 +249,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
         // totalStaked should be equal to stakesByUser[staker1] + stakesByUser[staker2]
         assertEq(
             pdtStakingV2.totalStaked(),
-            pdtStakingV2.stakesByUser(staker1) +
-                pdtStakingV2.stakesByUser(staker2)
+            pdtStakingV2.stakesByUser(staker1) + pdtStakingV2.stakesByUser(staker2)
         );
 
         // staker1 is able to unstake again
@@ -311,9 +301,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
         vm.stopPrank();
     }
 
-    function testFuzz_claim_RevertIf_ClaimAfterAlreadyClaimedForEpoch(
-        uint64 _stakeAmount
-    ) public {
+    function testFuzz_claim_RevertIf_ClaimAfterAlreadyClaimedForEpoch(uint64 _stakeAmount) public {
         uint256 stakeAmount = uint256(_stakeAmount) + 1;
         pdt.mint(staker, stakeAmount * 3);
 
@@ -365,10 +353,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
 
         // there is no reward for epoch 0
         assertEq(pdtStakingV2.totalRewardsToDistribute(address(prime), 0), 0);
-        assertEq(
-            pdtStakingV2.totalRewardsToDistribute(address(prime), 1),
-            rewardAmount1
-        );
+        assertEq(pdtStakingV2.totalRewardsToDistribute(address(prime), 1), rewardAmount1);
 
         // always add reward tokens to the staking contract before new epoch starts
         _creditPRIMERewardPool(rewardAmount1);
@@ -377,10 +362,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
 
         /// EPOCH 2
 
-        assertEq(
-            pdtStakingV2.totalRewardsToDistribute(address(prime), 2),
-            rewardAmount1
-        );
+        assertEq(pdtStakingV2.totalRewardsToDistribute(address(prime), 2), rewardAmount1);
 
         // claim epoch 1's rewards
         vm.startPrank(staker);
@@ -389,10 +371,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
 
         assertEq(prime.balanceOf(staker), rewardAmount1);
         assertEq(aero.balanceOf(staker), rewardAmount2);
-        assertEq(
-            pdtStakingV2.totalRewardsClaimed(address(prime), 1),
-            rewardAmount1
-        );
+        assertEq(pdtStakingV2.totalRewardsClaimed(address(prime), 1), rewardAmount1);
 
         // stake more
         vm.startPrank(staker);
@@ -401,23 +380,11 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
         vm.stopPrank();
 
         // add more reward tokens to the staking contract
-        prime.mint(
-            address(pdtStakingV2),
-            pdtStakingV2.totalRewardsToDistribute(address(prime), 2)
-        );
-        aero.mint(
-            address(pdtStakingV2),
-            pdtStakingV2.totalRewardsToDistribute(address(aero), 2)
-        );
+        prime.mint(address(pdtStakingV2), pdtStakingV2.totalRewardsToDistribute(address(prime), 2));
+        aero.mint(address(pdtStakingV2), pdtStakingV2.totalRewardsToDistribute(address(aero), 2));
         _moveToNextEpoch(2);
-        assertEq(
-            pdtStakingV2.totalRewardsToDistribute(address(prime), 2),
-            rewardAmount1
-        );
-        assertEq(
-            pdtStakingV2.totalRewardsToDistribute(address(aero), 2),
-            rewardAmount2
-        );
+        assertEq(pdtStakingV2.totalRewardsToDistribute(address(prime), 2), rewardAmount1);
+        assertEq(pdtStakingV2.totalRewardsToDistribute(address(aero), 2), rewardAmount2);
 
         // EPOCH 3
 
@@ -428,10 +395,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
 
         assertEq(prime.balanceOf(staker), rewardAmount1 * 2);
         assertEq(aero.balanceOf(staker), rewardAmount2 * 2);
-        assertEq(
-            pdtStakingV2.totalRewardsClaimed(address(prime), 2),
-            rewardAmount1
-        );
+        assertEq(pdtStakingV2.totalRewardsClaimed(address(prime), 2), rewardAmount1);
     }
 
     function test_claim_MultipleClaimersWithNoUnstaking() public {
@@ -484,12 +448,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
         // staker1 claims rewards for epoch 2
         vm.startPrank(staker1);
         vm.expectEmit();
-        emit Claim(
-            staker1,
-            3,
-            address(prime),
-            (300 * (10 + 50)) / (10 + 40 + 50)
-        );
+        emit Claim(staker1, 3, address(prime), (300 * (10 + 50)) / (10 + 40 + 50));
         pdtStakingV2.claim(staker1);
         vm.stopPrank();
 
@@ -561,12 +520,7 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
         // staker2 claims rewards for epoch 1 and 2
         vm.startPrank(staker2);
         vm.expectEmit();
-        emit Claim(
-            staker2,
-            3,
-            address(prime),
-            (100 * 40) / (10 + 40) + (300 * 40) / 40
-        );
+        emit Claim(staker2, 3, address(prime), (100 * 40) / (10 + 40) + (300 * 40) / 40);
         pdtStakingV2.claim(staker2);
         vm.stopPrank();
     }
@@ -741,24 +695,18 @@ contract PDTStakingV2Test is Test, IPDTStakingV2 {
         pdtStakingV2.claim(staker1);
         vm.stopPrank();
 
-        assertEq(
-            pdtStakingV2.claimAmountForEpoch(staker2, 1, address(prime)),
-            80
-        );
+        assertEq(pdtStakingV2.claimAmountForEpoch(staker2, 1, address(prime)), 80);
 
         assertEq(pdtStakingV2.pendingRewards(address(prime)), 0);
 
         // staker2 unstakes
         vm.startPrank(staker2);
         vm.expectEmit();
-        emit Unstake(staker2, 40);
+        emit Unstake(staker2, 40, 2);
         pdtStakingV2.unstake(staker2, 40);
         vm.stopPrank();
 
-        assertEq(
-            pdtStakingV2.claimAmountForEpoch(staker2, 1, address(prime)),
-            80
-        );
+        assertEq(pdtStakingV2.claimAmountForEpoch(staker2, 1, address(prime)), 80);
 
         assertEq(pdtStakingV2.pendingRewards(address(prime)), 0);
 
