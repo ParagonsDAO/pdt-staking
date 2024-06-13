@@ -13,9 +13,17 @@ Pechshield - https://pub-219b30570f3a4406a348a79b73b8c1b5.r2.dev/staking-PeckShi
 
 ## Development
 
+### Setup
+
 ```bash
 forge install --shallow forge-std
 forge install --shallow OpenZeppelin/openzeppelin-contracts
+yarn install
+```
+
+### Build
+
+```bash
 forge build
 ```
 

@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@layerzerolabs/lz-evm-oapp-v2": "^2.3.22",
     "@nomiclabs/hardhat-waffle": "^2.0.6",
     "@openzeppelin/contracts": "^5.0.2"
   },
