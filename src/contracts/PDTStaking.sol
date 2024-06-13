@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity 0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -262,7 +262,10 @@ contract PDTStaking is ReentrancyGuard {
         if (_claimLeftOff == epochId) revert ClaimedUpToEpoch();
 
         for (_claimLeftOff; _claimLeftOff < epochId; ++_claimLeftOff) {
-            if (!userClaimedEpoch[msg.sender][_claimLeftOff] && contractWeightAtEpoch(_claimLeftOff) > 0) {
+            if (
+                !userClaimedEpoch[msg.sender][_claimLeftOff] &&
+                contractWeightAtEpoch(_claimLeftOff) > 0
+            ) {
                 userClaimedEpoch[msg.sender][_claimLeftOff] = true;
                 Epoch memory _epoch = epoch[_claimLeftOff];
                 uint256 _weightAtEpoch = _userWeightAtEpoch[msg.sender][_claimLeftOff];
@@ -316,20 +319,28 @@ contract PDTStaking is ReentrancyGuard {
     /// @param _user        Address to see `claimable_` for `_epochId`
     /// @param _epochId     Id of epoch wanting to get `claimable_` for
     /// @return claimable_  Amount claimable
-    function claimAmountForEpoch(address _user, uint256 _epochId) external view returns (uint256 claimable_) {
+    function claimAmountForEpoch(
+        address _user,
+        uint256 _epochId
+    ) external view returns (uint256 claimable_) {
         if (epochId <= _epochId) revert InvalidEpoch();
         if (userClaimedEpoch[_user][_epochId] || contractWeightAtEpoch(_epochId) == 0) return 0;
 
         Epoch memory _epoch = epoch[_epochId];
 
-        claimable_ = (_epoch.totalToDistribute * userWeightAtEpoch(_user, _epochId)) / contractWeightAtEpoch(_epochId);
+        claimable_ =
+            (_epoch.totalToDistribute * userWeightAtEpoch(_user, _epochId)) /
+            contractWeightAtEpoch(_epochId);
     }
 
     /// @notice              Returns total weight of `_user` at `_epochId`
     /// @param _user         Address to calculate `userWeight_` of for `_epochId`
     /// @param _epochId      Epoch id to calculate weight of `_user`
     /// @return userWeight_  Weight of `_user` for `_epochId`
-    function userWeightAtEpoch(address _user, uint256 _epochId) public view returns (uint256 userWeight_) {
+    function userWeightAtEpoch(
+        address _user,
+        uint256 _epochId
+    ) public view returns (uint256 userWeight_) {
         if (epochId <= _epochId) revert InvalidEpoch();
         uint256 _epochLeftOff = epochLeftOff[_user];
         Stake memory _stake = stakeDetails[_user];
@@ -351,7 +362,11 @@ contract PDTStaking is ReentrancyGuard {
     /// @notice                  Returns current total weight of contract
     /// @return contractWeight_  Total current weight of contract
     function contractWeight() external view returns (uint256 contractWeight_) {
-        uint256 _weightIncrease = _weightIncreaseSinceInteraction(block.timestamp, lastInteraction, totalStaked);
+        uint256 _weightIncrease = _weightIncreaseSinceInteraction(
+            block.timestamp,
+            lastInteraction,
+            totalStaked
+        );
         contractWeight_ = _weightIncrease + _contractWeight;
     }
 
@@ -410,7 +425,9 @@ contract PDTStaking is ReentrancyGuard {
                         _stake.lastInteraction,
                         _stake.amountStaked
                     );
-                    _userWeightAtEpoch[_user][_epochLeftOff] = _additionalWeight + _stake.weightAtLastInteraction;
+                    _userWeightAtEpoch[_user][_epochLeftOff] =
+                        _additionalWeight +
+                        _stake.weightAtLastInteraction;
                 }
             }
 
