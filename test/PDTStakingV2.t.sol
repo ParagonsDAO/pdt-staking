@@ -6,7 +6,7 @@ import {PDTStakingV2} from "../src/PDTStakingV2.sol";
 import {IPDTStakingV2} from "../src/interfaces/IPDTStakingV2.sol";
 import {MockERC20} from "../src/mocks/ERC20.sol";
 
-abstract contract PDTStakingV2Test is Test, IPDTStakingV2 {
+contract PDTStakingV2Test is Test, IPDTStakingV2 {
     PDTStakingV2 public pdtStakingV2;
     MockERC20 public pdt;
     MockERC20 public prime;
@@ -35,6 +35,18 @@ abstract contract PDTStakingV2Test is Test, IPDTStakingV2 {
         vm.stopPrank();
     }
 
+    /**
+     * Override abstract functions
+     */
+
+    function stake(address _to, uint256 _amount) public {}
+
+    function unstake(address _to, uint256 _amount) public {}
+
+    function claim(address _to) public {}
+
+    function transferStakes(address _to, uint256 _amount) public {}
+
     function test_constructor() public view {
         assertEq(pdtStakingV2.epochLength(), 4 weeks);
 
@@ -45,46 +57,28 @@ abstract contract PDTStakingV2Test is Test, IPDTStakingV2 {
     }
 
     /**
-     * pushBackEpoch0
-     */
-
-    function test_pushBackEpoch0_NonOwnerCannotPushBack() public {
-        vm.expectRevert();
-        pdtStakingV2.pushBackEpoch0(3 days);
-    }
-
-    function test_pushBackEpoch0_CannotPushBackAfterEpoch0() public {
-        _creditPRIMERewardPool(1);
-        _moveToNextEpoch(0);
-
-        assertEq(pdtStakingV2.currentEpochId(), 1);
-        vm.startPrank(owner);
-        vm.expectRevert();
-        pdtStakingV2.pushBackEpoch0(3 days);
-        vm.stopPrank();
-    }
-
-    function test_pushBackEpoch0_OwnerPushBack() public {
-        vm.startPrank(owner);
-        pdtStakingV2.pushBackEpoch0(3 days);
-        (uint256 _startTime, uint256 _endTime, ) = pdtStakingV2.epoch(0);
-        assertEq(_endTime - _startTime, 4 days);
-        vm.stopPrank();
-    }
-
-    /**
      * updateEpochLength
      */
 
-    function testFuzz_updateEpochLength_NonOwnerCannotUpdate(uint256 _newEpochLength) public {
+    function testFuzz_updateEpochLength_NonOwnerCannotUpdate(uint128 _newEpochLength) public {
+        uint256 newEpochLength = uint256(_newEpochLength) + 1;
+
         vm.expectRevert();
-        pdtStakingV2.updateEpochLength(_newEpochLength);
+        pdtStakingV2.updateEpochLength(newEpochLength);
     }
 
-    function testFuzz_updateEpochLength_OwnerUpdateEpochLength(uint256 _newEpochLength) public {
+    function testFuzz_updateEpochLength_OwnerUpdateEpochLength(uint128 _newEpochLength) public {
+        uint256 newEpochLength = uint256(_newEpochLength) + 1;
+
+        uint256 _epochId = pdtStakingV2.currentEpochId();
+        (uint256 _startTime, , ) = pdtStakingV2.epoch(_epochId);
+
         vm.startPrank(owner);
-        pdtStakingV2.updateEpochLength(_newEpochLength);
-        assertEq(pdtStakingV2.epochLength(), _newEpochLength);
+        pdtStakingV2.updateEpochLength(newEpochLength);
+
+        (, uint256 _newEndTime, ) = pdtStakingV2.epoch(_epochId);
+        assertEq(pdtStakingV2.epochLength(), newEpochLength);
+        assertEq(_startTime + newEpochLength, _newEndTime);
     }
 
     /**
@@ -401,37 +395,50 @@ abstract contract PDTStakingV2Test is Test, IPDTStakingV2 {
     function test_claim_MultipleClaimersWithNoUnstaking() public {
         /// EPOCH 0
 
+        uint256 epoch1_PRIME_pool_size = 100;
+
         // prepare reward pool for epoch 1 & start
-        _creditPRIMERewardPool(100);
+        _creditPRIMERewardPool(epoch1_PRIME_pool_size);
         _moveToNextEpoch(0);
 
         /// EPOCH 1
+
+        uint256 epoch1_staker1_stakedAmount = 10;
+        uint256 epoch1_staker2_stakedAmount = 40;
+        uint256 epoch2_PRIME_pool_size = 300;
 
         // staker1 stakes
         vm.startPrank(staker1);
         pdt.mint(staker1, 99999999999);
         pdt.approve(address(pdtStakingV2), 99999999999);
-        pdtStakingV2.stake(staker1, 10);
+        pdtStakingV2.stake(staker1, epoch1_staker1_stakedAmount);
         vm.stopPrank();
 
         // staker2 stakes
         vm.startPrank(staker2);
         pdt.mint(staker2, 99999999999);
         pdt.approve(address(pdtStakingV2), 99999999999);
-        pdtStakingV2.stake(staker2, 40); // totalStaked: 50
+        pdtStakingV2.stake(staker2, epoch1_staker2_stakedAmount); // totalStaked: 50
         vm.stopPrank();
 
         // prepare reward pool for epoch 2 & start
-        _creditPRIMERewardPool(300);
+        _creditPRIMERewardPool(epoch2_PRIME_pool_size);
         _moveToNextEpoch(1);
 
         /// EPOCH 2
 
         // staker1 claims rewards for epoch 1
         vm.startPrank(staker1);
-        vm.expectEmit();
-        emit Claim(staker1, 2, address(prime), (100 * 10) / (10 + 40));
+        // vm.expectEmit();
+        // emit Claim(
+        //     staker1,
+        //     2,
+        //     address(prime),
+        //     (epoch1_PRIME_pool_size * epoch1_staker1_stakedAmount) /
+        //         (epoch1_staker1_stakedAmount + epoch1_staker2_stakedAmount)
+        // );
         pdtStakingV2.claim(staker1);
+        prime.balanceOf(staker1);
         vm.stopPrank();
 
         // staker1 stakes

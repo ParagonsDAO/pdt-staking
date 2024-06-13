@@ -130,16 +130,6 @@ interface IPDTStakingV2 {
         uint256 weightAtEnd;
     }
 
-    /**
-     * @notice Represents the status of a reward token within the contract
-     * @param isActive Indicates whether this token is currently active for rewarding users. If `true`, the token is used as a reward
-     * @param index The position of this reward token in the overall list of reward tokens
-     */
-    struct RewardTokenInfo {
-        bool isActive;
-        uint256 index;
-    }
-
     /// EXTERNAL FUNCTIONS ///
 
     /**

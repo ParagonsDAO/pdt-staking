@@ -46,8 +46,9 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     /// @notice Dynamic array to store reward token addresses
     address[] public rewardTokenList;
 
-    /// @notice Reward token to its info
-    mapping(address => RewardTokenInfo) public rewardTokenInfo;
+    /// @notice Reward token to its active/inactive status
+    /// @notice active/inactive indicates whether this token is currently active for rewarding users.
+    mapping(address => bool) public rewardTokenStatus;
 
     /// @notice Reward token to its unclaimed amount
     mapping(address => uint256) public unclaimedRewards;
@@ -104,24 +105,16 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     /// OWNER FUNCTION ///
 
     /**
-     * @notice Push back epoch 0, used in case PRIME can not be transferred at current end time
-     * @param _timeToPushBack The number of seconds to push epoch 0 back
-     */
-    function pushBackEpoch0(uint256 _timeToPushBack) external onlyOwner {
-        if (currentEpochId != 0) revert AfterEpoch0();
-
-        epoch[0].endTime += _timeToPushBack;
-
-        emit PushBackEpoch0(epoch[0].endTime);
-    }
-
-    /**
      * @notice Update epoch length
      * @param _epochLength New epoch length in seconds
      */
     function updateEpochLength(uint256 _epochLength) external onlyOwner {
+        require(_epochLength > 0, "Invalid new epoch length");
+
         uint256 previousEpochLength = epochLength;
         epochLength = _epochLength;
+
+        epoch[currentEpochId].endTime = epoch[currentEpochId].startTime + _epochLength;
 
         emit UpdateEpochLength(currentEpochId, previousEpochLength, _epochLength);
     }
@@ -138,10 +131,9 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
         for (uint256 i = 0; i < numOfRewardTokens; ) {
             if (rewardTokenList[i] == _rewardToken) {
-                RewardTokenInfo memory _rewardTokenInfo = rewardTokenInfo[_rewardToken];
-                if (_rewardTokenInfo.isActive != _isActive) {
-                    _rewardTokenInfo.isActive = _isActive;
-                    rewardTokenInfo[_rewardToken] = _rewardTokenInfo;
+                bool _oldStatus = rewardTokenStatus[_rewardToken];
+                if (_oldStatus != _isActive) {
+                    rewardTokenStatus[_rewardToken] = _isActive;
 
                     emit UpsertRewardToken(currentEpochId, _rewardToken, _isActive);
                 }
@@ -155,11 +147,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
         // If _rewardToken is not found in rewardTokenList, then add it
         rewardTokenList.push(_rewardToken);
-
-        RewardTokenInfo memory _tokenInfo;
-        _tokenInfo.isActive = _isActive;
-        _tokenInfo.index = rewardTokenList.length;
-        rewardTokenInfo[_rewardToken] = _tokenInfo;
+        rewardTokenStatus[_rewardToken] = _isActive;
 
         emit UpsertRewardToken(currentEpochId, _rewardToken, _isActive);
     }
@@ -178,7 +166,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
             for (uint256 i; i < rewardTokenList.length; ) {
                 address _rewardToken = rewardTokenList[i];
 
-                if (rewardTokenInfo[_rewardToken].isActive) {
+                if (rewardTokenStatus[_rewardToken]) {
                     uint256 _rewardBalance = IERC20(_rewardToken).balanceOf(address(this));
                     uint256 _rewardsToDistribute = _rewardBalance - unclaimedRewards[_rewardToken];
 
@@ -236,6 +224,8 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
     /// @inheritdoc IPDTStakingV2
     function claim(address _to) external nonReentrant {
+        _setUserWeightAtEpoch(msg.sender);
+
         uint256 _claimLeftOff = claimLeftOff[msg.sender];
 
         if (_claimLeftOff == currentEpochId) revert ClaimedUpToEpoch();
@@ -345,7 +335,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         for (uint256 i = 0; i < numOfTokens; ) {
             address _token = rewardTokenList[i];
 
-            if (rewardTokenInfo[_token].isActive) {
+            if (rewardTokenStatus[_token]) {
                 ++numOfActiveTokens;
             }
 
@@ -360,7 +350,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         for (uint256 i = 0; i < numOfTokens; ) {
             address _token = rewardTokenList[i];
 
-            if (rewardTokenInfo[_token].isActive) {
+            if (rewardTokenStatus[_token]) {
                 _rewardTokens[count] = _token;
                 ++count;
             }
