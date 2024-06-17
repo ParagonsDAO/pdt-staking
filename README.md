@@ -27,6 +27,17 @@ yarn install
 forge build
 ```
 
+## Deploy
+
+```bash
+forge create --rpc-url "<your_rpc_url>" \
+  --constructor-args <initial_epoch_length> <first_epoch_start_in> "<PDTOFT_address>" "<initial_owner_address>" \
+  --private-key "<your_private_key>" \
+  --etherscan-api-key "<your_basescan_api_key>" \
+  --verify \
+  src/contracts/PDTStakingV2.sol:PDTStakingV2
+```
+
 ## Immunefi Bug Bounty
 
 ParagonsDAO hosts a bug bounty on Immunefi at this address https://immunefi.com/bounty/paragonsdao/. 

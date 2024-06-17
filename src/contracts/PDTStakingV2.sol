@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ILayerZeroComposer} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroComposer.sol";
 
 import {IPDTStakingV2} from "../interfaces/IPDTStakingV2.sol";
 
@@ -13,7 +12,7 @@ import {IPDTStakingV2} from "../interfaces/IPDTStakingV2.sol";
  * @notice Contract that allows users to stake PDT
  * @author Michael
  */
-contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable, ILayerZeroComposer {
+contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
     /// STATE VARIABLES ///
@@ -80,17 +79,6 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable, ILayerZeroComp
     /// @notice Account to the amount of staked tokens
     mapping(address => uint256) public stakesByUser;
 
-    /**
-     * ComposedReceiver states
-     */
-
-    /// @notice Stores the last received message.
-    string public lastComposedMessage = "Nothing received yet";
-
-    /// @notice Store LayerZero addresses.
-    address public immutable endpoint;
-    address public immutable oApp;
-
     /// CONSTRUCTOR ///
 
     /**
@@ -99,16 +87,12 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable, ILayerZeroComp
      * @param _firstEpochStartIn The duration of seconds the first epoch will starts in
      * @param _pdt The address of PDT token
      * @param _initialOwner The address of initial owner
-     * @param _endpoint LayerZero Endpoint address
-     * @param _oApp The address of the OApp that is sending the composed message.
      */
     constructor(
         uint256 _epochLength,
         uint256 _firstEpochStartIn,
         address _pdt,
-        address _initialOwner,
-        address _endpoint,
-        address _oApp
+        address _initialOwner
     ) Ownable(_initialOwner) {
         require(_epochLength > 0, "Zero epochLength");
         require(_firstEpochStartIn > 0, "Zero firstEpochStartIn");
@@ -118,8 +102,6 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable, ILayerZeroComp
         epoch[0].endTime = block.timestamp + _firstEpochStartIn;
         epoch[0].startTime = block.timestamp;
         pdt = _pdt;
-        endpoint = _endpoint;
-        oApp = _oApp;
     }
 
     /// OWNER FUNCTION ///
@@ -214,7 +196,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable, ILayerZeroComp
 
     /// @inheritdoc IPDTStakingV2
     function stake(address _to, uint256 _amount) external nonReentrant {
-        require(_amount > 0, "Non-zero stake");
+        require(_amount > 0, "Invalid stake amount");
         require(block.timestamp < epoch[currentEpochId].endTime, "Epoch has ended");
 
         _setUserWeightAtEpoch(_to);
@@ -229,6 +211,9 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable, ILayerZeroComp
 
     /// @inheritdoc IPDTStakingV2
     function unstake(address _to, uint256 _amount) external nonReentrant {
+        require(_amount > 0, "Invalid unstake amount");
+        require(block.timestamp < epoch[currentEpochId].endTime, "Epoch has ended");
+
         uint256 amountStaked = stakesByUser[_to];
         require(_amount <= amountStaked, "Insufficient stakes");
 
@@ -329,34 +314,12 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable, ILayerZeroComp
     /// @inheritdoc IPDTStakingV2
     function transferStakes(address _to, uint256 _amount) external nonReentrant {
         require(_to != address(0) || _to != msg.sender, "Invalid target wallet");
-        require(_amount > 0, "Zero transfer");
+        require(_amount > 0, "Invalid stakes transfer amount");
 
         stakesByUser[msg.sender] -= _amount;
         stakesByUser[_to] += _amount;
 
         emit TransferStakes(msg.sender, _to, currentEpochId, _amount);
-    }
-
-    /**
-     * @notice Handles incoming composed messages from LayerZero.
-     * @dev Decodes the message payload and updates the state.
-     * @param _from The address of the originating OApp.
-     * @param _message The encoded message content.
-     */
-    function lzCompose(
-        address _from,
-        bytes32 /*_guid*/,
-        bytes calldata _message,
-        address /*_executor*/,
-        bytes calldata /*_extraData*/
-    ) external payable override {
-        // Perform checks to make sure composed message comes from correct OApp.
-        require(_from == oApp, "!oApp");
-        require(msg.sender == endpoint, "!endpoint");
-
-        // Decode the payload to get the message
-        (string memory message, ) = abi.decode(_message, (string, address));
-        lastComposedMessage = message;
     }
 
     /// VIEW FUNCTIONS ///

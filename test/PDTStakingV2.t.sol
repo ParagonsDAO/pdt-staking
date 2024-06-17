@@ -7,61 +7,36 @@ import {Test, console} from "forge-std/Test.sol";
 // Contract imports
 import {PDTStaking} from "../src/contracts/PDTStaking.sol";
 import {PDTStakingV2} from "../src/contracts/PDTStakingV2.sol";
-import {PDTOFTAdapter} from "../src/contracts/PDTOFTAdapter.sol";
 import {IPDTStakingV2} from "../src/interfaces/IPDTStakingV2.sol";
 
 // Mock imports
-import {PDTMock} from "../src/mocks/PDTMock.sol";
 import {PRIMEMock} from "../src/mocks/PRIMEMock.sol";
 import {PROMPTMock} from "../src/mocks/PROMPTMock.sol";
 import {PDTOFTMock} from "../src/mocks/PDTOFTMock.sol";
-
-// OApp imports
-import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 
 // DevTools imports
 import {TestHelperOz5} from "@layerzerolabs/test-devtools-evm-foundry/contracts/TestHelperOz5.sol";
 
 contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
-    using OptionsBuilder for bytes;
-
-    uint32 aEid = 1;
+    // Mock endpoint of base/sepolia base chain
     uint32 bEid = 2;
-
-    PDTMock public aPDT;
-    PRIMEMock public aPRIME;
-    PDTStaking public aPDTStaking;
-    PDTOFTAdapter public aPDTOFTAdapter;
 
     PDTStakingV2 public bPDTStakingV2;
     PDTOFTMock public bPDTOFT;
     PRIMEMock public bPRIME;
     PROMPTMock public bPROMPT;
+
     address owner;
     address staker = address(0x9);
     address staker1 = address(0x1);
     address staker2 = address(0x2);
 
+    uint256 initialEpochLength = 4 weeks;
+    uint256 initialFirstEpochStartIn = 1 days;
+
     function setUp() public virtual override {
         super.setUp();
         setUpEndpoints(2, LibraryType.UltraLightNode);
-
-        aPDT = new PDTMock("Paragons DAO Token", "PDT");
-        aPRIME = new PRIMEMock("PRIME Token", "PRIME");
-        aPDTStaking = new PDTStaking(
-            24 weeks, // time to double
-            4 weeks, // epoch length
-            1 days, // first epoch start in
-            address(aPDT),
-            address(aPRIME),
-            msg.sender
-        );
-        aPDTOFTAdapter = PDTOFTAdapter(
-            _deployOApp(
-                type(PDTOFTAdapter).creationCode,
-                abi.encode(address(aPDT), address(endpoints[aEid]), address(this))
-            )
-        );
 
         bPRIME = new PRIMEMock("PRIME Token", "PRIME");
         bPROMPT = new PROMPTMock("PROMPT Token", "PROMPT");
@@ -73,27 +48,14 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
             )
         );
 
-        bPDTStakingV2 = PDTStakingV2(
-            _deployOApp(
-                type(PDTStakingV2).creationCode,
-                abi.encode(
-                    4 weeks, // epochLength
-                    1 days, // firstEpochStartIn
-                    address(bPDTOFT), // PDT address
-                    msg.sender, // initial owner
-                    address(endpoints[bEid]),
-                    address(bPDTOFT)
-                )
-            )
+        bPDTStakingV2 = new PDTStakingV2(
+            initialEpochLength, // epochLength
+            initialFirstEpochStartIn, // firstEpochStartIn
+            address(bPDTOFT), // PDT address
+            msg.sender // initial owner
         );
 
         owner = bPDTStakingV2.owner();
-
-        // config and wire the ofts
-        address[] memory ofts = new address[](2);
-        ofts[0] = address(aPDTOFTAdapter);
-        ofts[1] = address(bPDTOFT);
-        this.wireOApps(ofts);
 
         vm.startPrank(owner);
         bPDTStakingV2.upsertRewardToken(address(bPRIME), true);
@@ -101,7 +63,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
     }
 
     /**
-     * Override interface functions
+     * Implement interface functions
      */
 
     function stake(address _to, uint256 _amount) external {}
@@ -112,11 +74,15 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
 
     function transferStakes(address _to, uint256 _amount) external {}
 
+    /**
+     * contructor
+     */
+
     function test_constructor() public {
-        assertEq(bPDTStakingV2.epochLength(), 4 weeks);
+        assertEq(bPDTStakingV2.epochLength(), initialEpochLength);
 
         (uint256 _startTime, uint256 _endTime, ) = bPDTStakingV2.epoch(0);
-        assertEq(_endTime - _startTime, 1 days);
+        assertEq(_endTime - _startTime, initialFirstEpochStartIn);
 
         assertEq(bPDTStakingV2.pdt(), address(bPDTOFT));
     }
@@ -125,7 +91,12 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
      * updateEpochLength
      */
 
-    function testFuzz_updateEpochLength_NonOwnerCannotUpdate(uint128 _newEpochLength) public {
+    function test_updateEpochLength_RevertIf_ZeroNewEpochLength() public {
+        vm.expectRevert();
+        bPDTStakingV2.updateEpochLength(0);
+    }
+
+    function testFuzz_updateEpochLength_RevertIf_NonOwnerUpdate(uint128 _newEpochLength) public {
         uint256 newEpochLength = uint256(_newEpochLength) + 1;
 
         vm.expectRevert();
@@ -139,27 +110,91 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         (uint256 _startTime, , ) = bPDTStakingV2.epoch(_epochId);
 
         vm.startPrank(owner);
+        vm.expectEmit();
+        emit UpdateEpochLength(0, initialEpochLength, newEpochLength);
         bPDTStakingV2.updateEpochLength(newEpochLength);
 
-        (, uint256 _newEndTime, ) = bPDTStakingV2.epoch(_epochId);
         assertEq(bPDTStakingV2.epochLength(), newEpochLength);
+
+        (, uint256 _newEndTime, ) = bPDTStakingV2.epoch(_epochId);
         assertEq(_startTime + newEpochLength, _newEndTime);
+    }
+
+    function test_updateEpochLength_unstake_RevertIf_EpochHasEnded() public {
+        /// EPOCH 0
+
+        uint256 initialBalance = 100;
+        bPDTOFT.mint(staker1, initialBalance);
+
+        vm.startPrank(staker1);
+        bPDTOFT.approve(address(bPDTStakingV2), initialBalance);
+
+        // Can't stake if current epoch has ended
+        (, uint256 epoch0EndTime, ) = bPDTStakingV2.epoch(0);
+        vm.warp(epoch0EndTime + 1 days);
+        vm.expectRevert(bytes("Epoch has ended"));
+        bPDTStakingV2.stake(staker1, initialBalance);
+
+        vm.expectRevert(bytes("Epoch has ended"));
+        bPDTStakingV2.unstake(staker1, initialBalance);
+        vm.stopPrank();
+
+        // Extend current epoch
+        vm.startPrank(owner);
+        bPDTStakingV2.updateEpochLength(bPDTStakingV2.epochLength() + 2 days);
+        vm.stopPrank();
+
+        // Should be able to stake
+        vm.startPrank(staker1);
+        vm.expectEmit();
+        emit Stake(staker1, initialBalance, 0);
+        bPDTStakingV2.stake(staker1, initialBalance);
+        vm.stopPrank();
+
+        // End epoch 0
+        _creditPRIMERewardPool(initialBalance);
+        _moveToNextEpoch(0);
+
+        /// EPOCH 1
+
+        // Should be able to unstake half of initial stakes
+        vm.startPrank(staker1);
+        vm.expectEmit();
+        emit Unstake(staker1, initialBalance / 2, 1);
+        bPDTStakingV2.unstake(staker1, initialBalance / 2);
+        vm.stopPrank();
+
+        (, uint256 epoch1EndTime, ) = bPDTStakingV2.epoch(1);
+        vm.warp(epoch1EndTime + 1 days);
+
+        assertGt(block.timestamp, epoch1EndTime);
+
+        // Should not be able to unstake since epoch has ended
+        vm.startPrank(staker1);
+        vm.expectRevert(bytes("Epoch has ended"));
+        bPDTStakingV2.unstake(staker1, initialBalance / 2);
+        vm.stopPrank();
     }
 
     /**
      * upsertRewardToken & getActiveRewardTokenList
      */
 
-    function test_upsertRewardToken() public {
+    function test_upsertRewardToken_RevertIf_NonOwnerTry() public {
+        vm.expectRevert();
+        bPDTStakingV2.upsertRewardToken(address(bPROMPT), true);
+    }
+
+    function test_upsertRewardToken_OwnerCanUpsert() public {
         vm.startPrank(owner);
-        // add AERO as a new active reward token
+        // add PROMPT as a new active reward token
         bPDTStakingV2.upsertRewardToken(address(bPROMPT), true);
 
         // check active reward token list
         (address[] memory tokens, ) = bPDTStakingV2.getActiveRewardTokenList();
         assertEq(tokens.length, 2);
 
-        // mark AERO as an inactive reward token
+        // mark PROMPT as an inactive reward token
         bPDTStakingV2.upsertRewardToken(address(bPROMPT), false);
 
         // check active reward token list
@@ -167,7 +202,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         assertEq(tokens2[0], address(bPRIME));
         assertEq(tokens2.length, 1);
 
-        // mark AERO as an active reward token again
+        // mark PROMPT as an active reward token again
         bPDTStakingV2.upsertRewardToken(address(bPROMPT), true);
 
         // check active reward token list
@@ -194,18 +229,25 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
      * stake
      */
 
-    function test_stake_RevertIf_StakeMoreThanBalance() public {
-        bPDTOFT.mint(staker, 100);
-        assertEq(bPDTOFT.balanceOf(staker), 100);
+    function testFuzz_stake_RevertIf_StakeMoreThanBalance(uint128 _amount) public {
+        uint256 initialBalance = uint256(_amount) + 1;
+        bPDTOFT.mint(staker, initialBalance);
+        assertEq(bPDTOFT.balanceOf(staker), initialBalance);
 
         vm.startPrank(staker);
         vm.expectRevert();
-        bPDTStakingV2.stake(staker, 200);
+        bPDTStakingV2.stake(staker, initialBalance + 1);
         vm.stopPrank();
     }
 
     function testFuzz_stake_SetDetailsAfterStake(uint64 _stakeAmount) public {
         uint256 stakeAmount = uint256(_stakeAmount) + 1; // prevent zero stake by adding 1
+
+        assertEq(bPDTOFT.balanceOf(staker), 0);
+        assertEq(bPDTStakingV2.totalStaked(), 0);
+        assertEq(bPDTStakingV2.stakesByUser(staker), 0);
+        assertEq(bPDTOFT.balanceOf(address(bPDTStakingV2)), 0);
+
         bPDTOFT.mint(staker, stakeAmount * 3);
 
         vm.startPrank(staker);
@@ -245,6 +287,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         uint64 _stakeAmount1,
         uint64 _stakeAmount2
     ) public {
+        /// EPOCH 0
         uint256 stakeAmount1 = uint256(_stakeAmount1) + 1;
         uint256 stakeAmount2 = uint256(_stakeAmount2) + 1;
         bPDTOFT.mint(staker1, stakeAmount1);
@@ -267,6 +310,8 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
 
         _creditPRIMERewardPool(1);
         _moveToNextEpoch(0);
+
+        /// EPOCH 1
 
         assertEq(
             bPDTStakingV2.contractWeightAtEpoch(0),
@@ -692,7 +737,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
 
         // move to epoch 1
         _creditPRIMERewardPool(100);
-        _creditAERORewardPool(200);
+        _creditPROMPTRewardPool(200);
         _moveToNextEpoch(0);
 
         /// EPOCH 1
@@ -713,7 +758,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
 
         // move to epoch 2
         _creditPRIMERewardPool(10);
-        _creditAERORewardPool(20);
+        _creditPROMPTRewardPool(20);
         _moveToNextEpoch(1);
 
         /// EPOCH 2
@@ -803,7 +848,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         bPRIME.mint(address(bPDTStakingV2), _amount);
     }
 
-    function _creditAERORewardPool(uint256 _amount) internal {
+    function _creditPROMPTRewardPool(uint256 _amount) internal {
         bPROMPT.mint(address(bPDTStakingV2), _amount);
     }
 
