@@ -27,16 +27,11 @@ interface IPDTStakingV2 {
     );
 
     /**
-     * @notice Emitted if a reward token info is added or updated
+     * @notice Emitted if a reward token is registered
      * @param epochId The epoch Id that the reward token info is added or updated in
-     * @param rewardToken The address of reward token to be added or updated within contract
-     * @param isActive Indicates that `rewardToken` will be an active/inactive reward token
+     * @param rewardToken The address of new reward token
      */
-    event UpsertRewardToken(
-        uint256 indexed epochId,
-        address indexed rewardToken,
-        bool indexed isActive
-    );
+    event RegisterNewRewardToken(uint256 indexed epochId, address indexed rewardToken);
 
     /**
      * @notice Emitted upon user staking
@@ -82,6 +77,12 @@ interface IPDTStakingV2 {
         uint256 amount
     );
 
+    /**
+     * @notice Emitted upon owner updates reward duration
+     * @param newRewardDuration The time-to-live duration for rewards in seconds
+     */
+    event UpdateRewardDuration(uint256 newRewardDuration);
+
     /// ERRORS ///
 
     /**
@@ -111,10 +112,15 @@ interface IPDTStakingV2 {
 
     /**
      * @notice Error for if reward pool for the next epoch is not ready while distributing
-     * @param rewardToken The address of reward token to distribute
-     * @param currentEpochId The epoch id which is going to be ended
+     * @param nextEpochId The epoch id to be started
      */
-    error EmptyRewardPool(address rewardToken, uint256 currentEpochId);
+    error EmptyRewardPool(uint256 nextEpochId);
+
+    /**
+     * @notice Error for if the owner attemps to register existing reward token
+     * @param rewardToken The address of already registered reward token
+     */
+    error DuplicatedRewardToken(address rewardToken);
 
     /// STRUCTS ///
 

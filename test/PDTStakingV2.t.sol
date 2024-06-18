@@ -58,7 +58,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         owner = bPDTStakingV2.owner();
 
         vm.startPrank(owner);
-        bPDTStakingV2.upsertRewardToken(address(bPRIME), true);
+        bPDTStakingV2.registerNewRewardToken(address(bPRIME));
         vm.stopPrank();
     }
 
@@ -177,37 +177,22 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
     }
 
     /**
-     * upsertRewardToken & getActiveRewardTokenList
+     * registerNewRewardToken & getActiveRewardTokenList
      */
 
-    function test_upsertRewardToken_RevertIf_NonOwnerTry() public {
+    function test_registerNewRewardToken_RevertIf_NonOwnerTry() public {
         vm.expectRevert();
-        bPDTStakingV2.upsertRewardToken(address(bPROMPT), true);
+        bPDTStakingV2.registerNewRewardToken(address(bPROMPT));
     }
 
-    function test_upsertRewardToken_OwnerCanUpsert() public {
+    function test_registerNewRewardToken_OwnerCanRegister() public {
         vm.startPrank(owner);
         // add PROMPT as a new active reward token
-        bPDTStakingV2.upsertRewardToken(address(bPROMPT), true);
+        bPDTStakingV2.registerNewRewardToken(address(bPROMPT));
 
-        // check active reward token list
-        (address[] memory tokens, ) = bPDTStakingV2.getActiveRewardTokenList();
-        assertEq(tokens.length, 2);
-
-        // mark PROMPT as an inactive reward token
-        bPDTStakingV2.upsertRewardToken(address(bPROMPT), false);
-
-        // check active reward token list
-        (address[] memory tokens2, ) = bPDTStakingV2.getActiveRewardTokenList();
-        assertEq(tokens2[0], address(bPRIME));
-        assertEq(tokens2.length, 1);
-
-        // mark PROMPT as an active reward token again
-        bPDTStakingV2.upsertRewardToken(address(bPROMPT), true);
-
-        // check active reward token list
-        (address[] memory tokens3, ) = bPDTStakingV2.getActiveRewardTokenList();
-        assertEq(tokens3.length, 2);
+        // check reward token list
+        assertEq(bPDTStakingV2.rewardTokenList(0), address(bPRIME));
+        assertEq(bPDTStakingV2.rewardTokenList(1), address(bPROMPT));
 
         vm.stopPrank();
     }
@@ -223,6 +208,24 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         _moveToNextEpoch(0);
 
         assertEq(bPDTStakingV2.currentEpochId(), 1);
+    }
+
+    function testFail_distribute_EmptyRewardPool() public {
+        /// EPOCH 0
+
+        uint256 defaultPoolSize = 100;
+        _creditPRIMERewardPool(defaultPoolSize);
+        _moveToNextEpoch(0);
+
+        /// EPOCH 1 - active reward tokens: PRIME
+
+        _creditPRIMERewardPool(defaultPoolSize);
+        _creditPROMPTRewardPool(defaultPoolSize);
+        _moveToNextEpoch(1);
+
+        /// EPOCH 2 - active reward tokens: PRIME, PROMPT
+
+        _moveToNextEpoch(2);
     }
 
     /**
@@ -328,8 +331,8 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         /// EPOCH 0
         // staker1 stakes in epoch 0
         // staker2 stakes in epoch 0
-        uint256 stakeAmount1 = uint256(_stakeAmount1) + 1;
-        uint256 stakeAmount2 = uint256(_stakeAmount2) + 1;
+        uint256 stakeAmount1 = uint256(_stakeAmount1) + 2;
+        uint256 stakeAmount2 = uint256(_stakeAmount2) + 2;
         bPDTOFT.mint(staker1, stakeAmount1);
         bPDTOFT.mint(staker2, stakeAmount2);
 
@@ -451,7 +454,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
 
         // add reward tokens to the staking contract
         vm.startPrank(owner);
-        bPDTStakingV2.upsertRewardToken(address(bPROMPT), true);
+        bPDTStakingV2.registerNewRewardToken(address(bPROMPT));
         _creditPRIMERewardPool(rewardAmount1);
         bPROMPT.mint(address(bPDTStakingV2), rewardAmount2);
         vm.stopPrank();
@@ -652,6 +655,50 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         vm.stopPrank();
     }
 
+    function test_claim_ClaimRewardsTwoYearsLater() public {
+        /// EPOCH 0
+
+        uint256 initialBalance = 100;
+        bPDTOFT.mint(staker, initialBalance);
+
+        // stake in epoch 0
+        vm.startPrank(staker);
+        bPDTOFT.approve(address(bPDTStakingV2), initialBalance);
+        bPDTStakingV2.stake(staker, initialBalance);
+        vm.stopPrank();
+
+        uint256 TWO_YEARS = 104 weeks;
+        uint256 POOL_SIZE = 100;
+        uint256 epochLength = bPDTStakingV2.epochLength();
+        uint256 nExpiredEpochs = 5;
+        uint256 nEpochs = TWO_YEARS / epochLength + nExpiredEpochs;
+
+        for (uint256 epochId = 0; epochId < nEpochs; ) {
+            _creditPRIMERewardPool(POOL_SIZE);
+            _moveToNextEpoch(epochId);
+
+            unchecked {
+                ++epochId;
+            }
+        }
+
+        /// EPOCH nEpochs
+
+        assertEq(bPDTStakingV2.currentEpochId(), nEpochs);
+        assertEq(bPDTStakingV2.rewardsActiveFrom(), nExpiredEpochs + 1);
+
+        vm.startPrank(staker);
+        vm.expectEmit();
+        emit Claim(staker, nEpochs, address(bPRIME), POOL_SIZE * (nEpochs - 1 - nExpiredEpochs));
+        bPDTStakingV2.claim(staker);
+        vm.stopPrank();
+
+        assertEq(
+            bPRIME.balanceOf(address(bPDTStakingV2)),
+            POOL_SIZE * (nExpiredEpochs + 1 /*Current Epoch*/)
+        );
+    }
+
     /**
      * transferStakes
      */
@@ -732,7 +779,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
 
         // register aero as a reward token
         vm.startPrank(owner);
-        bPDTStakingV2.upsertRewardToken(address(bPROMPT), true);
+        bPDTStakingV2.registerNewRewardToken(address(bPROMPT));
         vm.stopPrank();
 
         // move to epoch 1

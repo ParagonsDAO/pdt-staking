@@ -27,6 +27,9 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     /// @notice The duration of each epoch in seconds
     uint256 public epochLength;
 
+    /// @notice The time-to-live duration for rewards in seconds
+    uint256 public rewardDuration = 104 weeks; // initial reward duration = 2 years
+
     /// @notice Epoch id to epoch details
     mapping(uint256 => Epoch) public epoch;
 
@@ -46,10 +49,6 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
     /// @notice Dynamic array to store reward token addresses
     address[] public rewardTokenList;
-
-    /// @notice Reward token to its active/inactive status
-    /// @notice active/inactive indicates whether this token is currently active for rewarding users.
-    mapping(address => bool) public rewardTokenStatus;
 
     /// @notice Reward token to its unclaimed amount
     mapping(address => uint256) public unclaimedRewards;
@@ -122,24 +121,30 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     }
 
     /**
-     * @notice Add or update reward token info of the contract
-     * @param _rewardToken The address of reward token
-     * @param _isActive Indicates that if the `_rewardToken` will be active/inactive reward token of the contract
+     * @notice Update reward duration
+     * @param _newRewardDuration The time-to-live duration for rewards in seconds
      */
-    function upsertRewardToken(address _rewardToken, bool _isActive) external onlyOwner {
-        require(_rewardToken != address(0), "Non-zero reward token address");
+    function updateRewardDuration(uint256 _newRewardDuration) external onlyOwner {
+        require(_newRewardDuration > 0, "Invalid reward duration");
+        require(_newRewardDuration > epochLength, "Invalid reward duration");
+
+        rewardDuration = _newRewardDuration;
+
+        emit UpdateRewardDuration(_newRewardDuration);
+    }
+
+    /**
+     * @notice Register a new reward token
+     * @param _newToken The address of reward token
+     */
+    function registerNewRewardToken(address _newToken) external onlyOwner {
+        require(_newToken != address(0), "Invalid reward token");
 
         uint256 numOfRewardTokens = rewardTokenList.length;
 
         for (uint256 i = 0; i < numOfRewardTokens; ) {
-            if (rewardTokenList[i] == _rewardToken) {
-                bool _oldStatus = rewardTokenStatus[_rewardToken];
-                if (_oldStatus != _isActive) {
-                    rewardTokenStatus[_rewardToken] = _isActive;
-
-                    emit UpsertRewardToken(currentEpochId, _rewardToken, _isActive);
-                }
-                return;
+            if (rewardTokenList[i] == _newToken) {
+                revert DuplicatedRewardToken(_newToken);
             }
 
             unchecked {
@@ -147,11 +152,10 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
             }
         }
 
-        // If _rewardToken is not found in rewardTokenList, then add it
-        rewardTokenList.push(_rewardToken);
-        rewardTokenStatus[_rewardToken] = _isActive;
+        // If _newToken is not found in rewardTokenList, then add it
+        rewardTokenList.push(_newToken);
 
-        emit UpsertRewardToken(currentEpochId, _rewardToken, _isActive);
+        emit RegisterNewRewardToken(currentEpochId, _newToken);
     }
 
     /**
@@ -165,19 +169,18 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
             epoch[currentEpochId].weightAtEnd = totalStaked;
             ++currentEpochId;
 
-            for (uint256 i; i < rewardTokenList.length; ) {
+            uint256 _nRewardTokenTypes = rewardTokenList.length;
+            uint256 _nRewardTokenTypesForNextEpoch;
+
+            for (uint256 i; i < _nRewardTokenTypes; ) {
                 address _rewardToken = rewardTokenList[i];
+                uint256 _rewardBalance = IERC20(_rewardToken).balanceOf(address(this));
+                uint256 _rewardsToDistribute = _rewardBalance - unclaimedRewards[_rewardToken];
 
-                if (rewardTokenStatus[_rewardToken]) {
-                    uint256 _rewardBalance = IERC20(_rewardToken).balanceOf(address(this));
-                    uint256 _rewardsToDistribute = _rewardBalance - unclaimedRewards[_rewardToken];
-
-                    if (_rewardsToDistribute == 0) {
-                        revert EmptyRewardPool(_rewardToken, currentEpochId - 1);
-                    }
-
+                if (_rewardsToDistribute > 0) {
                     totalRewardsToDistribute[_rewardToken][currentEpochId] = _rewardsToDistribute;
                     unclaimedRewards[_rewardToken] = _rewardBalance;
+                    ++_nRewardTokenTypesForNextEpoch;
                 }
 
                 unchecked {
@@ -185,10 +188,35 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
                 }
             }
 
+            if (_nRewardTokenTypesForNextEpoch == 0) {
+                revert EmptyRewardPool(currentEpochId);
+            }
+
             _currentEpoch.startTime = block.timestamp;
             _currentEpoch.endTime = block.timestamp + epochLength;
 
             epoch[currentEpochId] = _currentEpoch;
+        }
+    }
+
+    /**
+     * @notice Returns epoch id from which rewards are active
+     */
+    function rewardsActiveFrom() public view returns (uint256 bottomEpochId_) {
+        uint256 _currentEpochId = currentEpochId;
+        uint256 _rewardDuration = rewardDuration;
+        uint256 end = epoch[_currentEpochId].startTime;
+
+        for (uint256 i = _currentEpochId; i > 0; ) {
+            uint256 start = epoch[i - 1].startTime;
+            if (end - start > _rewardDuration) {
+                bottomEpochId_ = i;
+                break;
+            }
+
+            unchecked {
+                --i;
+            }
         }
     }
 
@@ -232,14 +260,16 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         _setUserWeightAtEpoch(msg.sender);
 
         uint256 _claimLeftOff = claimLeftOff[msg.sender];
+        uint256 _bottomEpochId = rewardsActiveFrom();
+
+        if (_bottomEpochId > _claimLeftOff) {
+            _claimLeftOff = _bottomEpochId;
+        }
 
         if (_claimLeftOff == currentEpochId) revert ClaimedUpToEpoch();
 
-        (
-            address[] memory _activeRewardTokenList,
-            uint256 _tokenListSize
-        ) = getActiveRewardTokenList();
-
+        address[] memory _rewardTokenList = rewardTokenList;
+        uint256 _tokenListSize = _rewardTokenList.length;
         uint256[] memory _pendingRewards = new uint256[](_tokenListSize);
 
         for (_claimLeftOff; _claimLeftOff < currentEpochId; ) {
@@ -252,7 +282,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
 
                 if (_weightAtEpoch > 0) {
                     for (uint256 i; i < _tokenListSize; ) {
-                        address _rewardToken = _activeRewardTokenList[i];
+                        address _rewardToken = _rewardTokenList[i];
 
                         uint256 _totalRewardsToDistributeAtEpoch = totalRewardsToDistribute[
                             _rewardToken
@@ -294,7 +324,7 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
         claimLeftOff[msg.sender] = currentEpochId;
 
         for (uint256 i; i < _tokenListSize; ) {
-            address _rewardToken = _activeRewardTokenList[i];
+            address _rewardToken = _rewardTokenList[i];
 
             uint256 _pendingRewardsByToken = _pendingRewards[i];
 
@@ -323,51 +353,6 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, Ownable {
     }
 
     /// VIEW FUNCTIONS ///
-
-    /**
-     * @notice Returns active reward token addresses
-     * @return rewardTokenList_
-     * @return rewardTokenListSize_
-     */
-    function getActiveRewardTokenList()
-        public
-        view
-        returns (address[] memory rewardTokenList_, uint256 rewardTokenListSize_)
-    {
-        uint256 numOfTokens = rewardTokenList.length;
-        uint256 numOfActiveTokens;
-
-        for (uint256 i = 0; i < numOfTokens; ) {
-            address _token = rewardTokenList[i];
-
-            if (rewardTokenStatus[_token]) {
-                ++numOfActiveTokens;
-            }
-
-            unchecked {
-                ++i;
-            }
-        }
-
-        address[] memory _rewardTokens = new address[](numOfActiveTokens);
-        uint256 count;
-
-        for (uint256 i = 0; i < numOfTokens; ) {
-            address _token = rewardTokenList[i];
-
-            if (rewardTokenStatus[_token]) {
-                _rewardTokens[count] = _token;
-                ++count;
-            }
-
-            unchecked {
-                ++i;
-            }
-        }
-
-        rewardTokenList_ = _rewardTokens;
-        rewardTokenListSize_ = numOfActiveTokens;
-    }
 
     /**
      * @notice Returns current pending rewards of a specific reward token for next epoch
