@@ -185,6 +185,13 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         bPDTStakingV2.registerNewRewardToken(address(bPROMPT));
     }
 
+    function test_registerNewRewardToken_RevertIf_RegisterExistingToken() public {
+        vm.startPrank(owner);
+        vm.expectRevert(abi.encodeWithSelector(DuplicatedRewardToken.selector, address(bPRIME)));
+        bPDTStakingV2.registerNewRewardToken(address(bPRIME));
+        vm.stopPrank();
+    }
+
     function test_registerNewRewardToken_OwnerCanRegister() public {
         vm.startPrank(owner);
         // add PROMPT as a new active reward token
@@ -693,10 +700,15 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         bPDTStakingV2.claim(staker);
         vm.stopPrank();
 
-        assertEq(
-            bPRIME.balanceOf(address(bPDTStakingV2)),
-            POOL_SIZE * (nExpiredEpochs + 1 /*Current Epoch*/)
-        );
+        uint256 _expiredRewardsAmount = bPRIME.balanceOf(address(bPDTStakingV2));
+        assertEq(_expiredRewardsAmount, POOL_SIZE * (nExpiredEpochs + 1 /*Current Epoch*/));
+
+        // Owner should be able to withdraw expired rewards
+        vm.startPrank(owner);
+        bPDTStakingV2.withdrawRewardTokens(address(bPRIME), _expiredRewardsAmount);
+        vm.stopPrank();
+
+        assertEq(bPRIME.balanceOf(address(bPDTStakingV2)), 0);
     }
 
     /**

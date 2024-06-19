@@ -34,12 +34,18 @@ interface IPDTStakingV2 {
     event RegisterNewRewardToken(uint256 indexed epochId, address indexed rewardToken);
 
     /**
+     * @notice Emitted if a new epoch is started
+     * @param newEpochId The new epoch id
+     */
+    event Distribute(uint256 indexed newEpochId);
+
+    /**
      * @notice Emitted upon user staking
      * @param to Address of who is receiving credit of stake
      * @param amount Stake amount of `to`
      * @param epochId The epoch id which staking is happened in
      */
-    event Stake(address to, uint256 indexed amount, uint256 epochId);
+    event Stake(address indexed to, uint256 indexed amount, uint256 indexed epochId);
 
     /**
      * @notice Emitted upon user unstaking
@@ -47,7 +53,7 @@ interface IPDTStakingV2 {
      * @param amount Amount `staker` unstaked
      * @param epochId The epoch id which unstaking is happened in
      */
-    event Unstake(address staker, uint256 indexed amount, uint256 epochId);
+    event Unstake(address indexed staker, uint256 indexed amount, uint256 indexed epochId);
 
     /**
      * @notice Emitted upon staker claiming
@@ -57,10 +63,10 @@ interface IPDTStakingV2 {
      * @param amount Amount claimed
      */
     event Claim(
-        address staker,
+        address indexed staker,
         uint256 indexed currentEpochId,
         address indexed rewardToken,
-        uint256 indexed amount
+        uint256 amount
     );
 
     /**
@@ -78,10 +84,17 @@ interface IPDTStakingV2 {
     );
 
     /**
+     * @notice Emitted upon the owner withdraw reward tokens
+     * @param rewardToken The address of reward token
+     * @param amount The amount of withdrawn reward tokens
+     */
+    event WithdrawRewardToken(address indexed rewardToken, uint256 indexed amount);
+
+    /**
      * @notice Emitted upon owner updates reward duration
      * @param newRewardDuration The time-to-live duration for rewards in seconds
      */
-    event UpdateRewardDuration(uint256 newRewardDuration);
+    event UpdateRewardDuration(uint256 indexed newRewardDuration);
 
     /// ERRORS ///
 
