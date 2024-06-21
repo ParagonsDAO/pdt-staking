@@ -132,10 +132,10 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         // Can't stake if current epoch has ended
         (, uint256 epoch0EndTime, ) = bPDTStakingV2.epoch(0);
         vm.warp(epoch0EndTime + 1 days);
-        vm.expectRevert(bytes("Epoch has ended"));
+        vm.expectRevert(OutOfEpoch.selector);
         bPDTStakingV2.stake(staker1, initialBalance);
 
-        vm.expectRevert(bytes("Epoch has ended"));
+        vm.expectRevert(OutOfEpoch.selector);
         bPDTStakingV2.unstake(staker1, initialBalance);
         vm.stopPrank();
 
@@ -171,7 +171,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
 
         // Should not be able to unstake since epoch has ended
         vm.startPrank(staker1);
-        vm.expectRevert(bytes("Epoch has ended"));
+        vm.expectRevert(OutOfEpoch.selector);
         bPDTStakingV2.unstake(staker1, initialBalance / 2);
         vm.stopPrank();
     }
@@ -700,15 +700,17 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         bPDTStakingV2.claim(staker);
         vm.stopPrank();
 
-        uint256 _expiredRewardsAmount = bPRIME.balanceOf(address(bPDTStakingV2));
-        assertEq(_expiredRewardsAmount, POOL_SIZE * (nExpiredEpochs + 1 /*Current Epoch*/));
+        // Should exclude current epoch's rewards
+        uint256 _expiredRewardsAmount = bPRIME.balanceOf(address(bPDTStakingV2)) - POOL_SIZE;
+        assertEq(_expiredRewardsAmount, POOL_SIZE * nExpiredEpochs);
 
         // Owner should be able to withdraw expired rewards
         vm.startPrank(owner);
         bPDTStakingV2.withdrawRewardTokens(address(bPRIME), _expiredRewardsAmount);
         vm.stopPrank();
 
-        assertEq(bPRIME.balanceOf(address(bPDTStakingV2)), 0);
+        assertEq(bPRIME.balanceOf(address(bPDTStakingV2)), POOL_SIZE);
+        assertEq(bPDTStakingV2.pendingRewards(address(bPRIME)), 0);
     }
 
     /**

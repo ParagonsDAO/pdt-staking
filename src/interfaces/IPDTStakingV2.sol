@@ -99,29 +99,26 @@ interface IPDTStakingV2 {
     /// ERRORS ///
 
     /**
-     * @notice Error for if epoch param of a function is not earlier than current epoch
-     */
-    error InvalidEpoch();
-
-    /**
      * @notice Error for if user has already claimed up to current epoch
      */
     error ClaimedUpToEpoch();
 
     /**
-     * @notice Error for if unstaking when nothing is staked
+     * @notice Error for if an action is performed when the current epoch has ended
      */
-    error NothingStaked();
+    error OutOfEpoch();
 
     /**
-     * @notice Error for if address is zero address
+     * @notice Can't stake zero amount.
      */
-    error ZeroAddress();
+    error InvalidStakeAmount();
 
     /**
-     * @notice Error for if `pushBackEpoch0` is called after epoch 0
+     * @notice Error for if unstaking zero or more than staked
+     * @param amountStaked Total amount of PDT staked by the user
+     * @param amountUnstaking The amount of PDT to unstake
      */
-    error AfterEpoch0();
+    error InvalidUnstakeAmount(uint256 amountStaked, uint256 amountUnstaking);
 
     /**
      * @notice Error for if reward pool for the next epoch is not ready while distributing
