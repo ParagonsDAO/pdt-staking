@@ -99,12 +99,34 @@ interface IPDTStakingV2 {
     /// ERRORS ///
 
     /**
-     * @notice Error for if user has already claimed up to current epoch
+     * @notice Can't withdraw unregistered reward token
+     */
+    error InvalidRewardToken();
+
+    /**
+     * @notice Can't withdraw zero reward tokens
+     */
+    error InvalidWithdrawAmount();
+
+    /**
+     * @notice Can't register already registered token
+     * @param rewardToken The address of already registered reward token
+     */
+    error DuplicatedRewardToken(address rewardToken);
+
+    /**
+     * @notice Can't distribute if reward pool for the next epoch is not ready
+     * @param nextEpochId The epoch id to be started
+     */
+    error EmptyRewardPool(uint256 nextEpochId);
+
+    /**
+     * @notice Can't claim if rewards are already claimed up to current epoch
      */
     error ClaimedUpToEpoch();
 
     /**
-     * @notice Error for if an action is performed when the current epoch has ended
+     * @notice Can't stake/unstake if the current epoch has ended
      */
     error OutOfEpoch();
 
@@ -114,23 +136,19 @@ interface IPDTStakingV2 {
     error InvalidStakeAmount();
 
     /**
-     * @notice Error for if unstaking zero or more than staked
+     * @notice Can't unstaking zero or more than staked
      * @param amountStaked Total amount of PDT staked by the user
      * @param amountUnstaking The amount of PDT to unstake
      */
     error InvalidUnstakeAmount(uint256 amountStaked, uint256 amountUnstaking);
 
     /**
-     * @notice Error for if reward pool for the next epoch is not ready while distributing
-     * @param nextEpochId The epoch id to be started
+     * @notice Can't transfer zero amount of stakes, can't transfer to zero address
+     * or to msg.sender.
+     *
+     * Emits a {TransferStakes} event.
      */
-    error EmptyRewardPool(uint256 nextEpochId);
-
-    /**
-     * @notice Error for if the owner attemps to register existing reward token
-     * @param rewardToken The address of already registered reward token
-     */
-    error DuplicatedRewardToken(address rewardToken);
+    error InvalidStakesTransfer();
 
     /// STRUCTS ///
 
@@ -149,30 +167,54 @@ interface IPDTStakingV2 {
     /// EXTERNAL FUNCTIONS ///
 
     /**
-     * @notice Stake PDT
-     * @param _to The address that will receive credit for stake
-     * @param _amount The amount of PDT to stake
+     * @notice Stake PDT.
+     * @param to The address that will receive credit for stake.
+     * @param amount The amount of PDT to stake.
+     *
+     * Requirements:
+     *
+     * - should stake during the current epoch is live.
+     * - `to` shouldn't be zero address.
+     * - `amount` shouldn't be zero.
+     *
+     * Emits a {Stake} event.
      */
-    function stake(address _to, uint256 _amount) external;
+    function stake(address to, uint256 amount) external;
 
     /**
-     * @notice Unstake PDT
-     * @param _to The address that will receive PDT unstaked
-     * @param _amount The amount of PDT to unstake
+     * @notice Unstake PDT.
+     * @param to The address that will receive PDT unstaked.
+     * @param amount The amount of PDT to unstake.
+     *
+     * Requirements:
+     *
+     * - should unstake during the current epoch is live.
+     * * - `to` shouldn't be zero address.
+     * - `amount` shouldn't be zero.
+     * - should unstake not more than staked amount.
+     *
+     * Emits an {Unstake} event.
      */
-    function unstake(address _to, uint256 _amount) external;
+    function unstake(address to, uint256 amount) external;
 
     /**
      * @notice Claims all pending rewards for msg.sender.
      * Claiming rewards is available just once per epoch.
-     * @param _to The address to send rewards to
+     * @param to The address to send rewards to
+     *
+     * Emits a {Claim} event.
      */
-    function claim(address _to) external;
+    function claim(address to) external;
 
     /**
      * @notice Transfer some amount of stakes to another wallet
-     * @param _to The target wallet address for transfering stakes
-     * @param _amount The amount of stakes to transfer to `_to` address
+     * @param to The target wallet address for transfering stakes
+     * @param amount The amount of stakes to transfer to `to` address
+     *
+     * Requirements:
+     *
+     * - `to` shouldn't be zero address nor msg.sender
+     * - `amount` shouldn't be zero
      */
-    function transferStakes(address _to, uint256 _amount) external;
+    function transferStakes(address to, uint256 amount) external;
 }

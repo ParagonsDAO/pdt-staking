@@ -26,13 +26,20 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
     PRIMEMock public bPRIME;
     PROMPTMock public bPROMPT;
 
+    bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+
     address owner;
+    address manager1 = address(0x91);
+    address manager2 = address(0x92);
     address staker = address(0x9);
     address staker1 = address(0x1);
     address staker2 = address(0x2);
 
     uint256 initialEpochLength = 4 weeks;
     uint256 initialFirstEpochStartIn = 1 days;
+
+    error AccessControlUnauthorizedAccount(address account, bytes32 neededRole);
 
     function setUp() public virtual override {
         super.setUp();
@@ -52,12 +59,17 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
             initialEpochLength, // epochLength
             initialFirstEpochStartIn, // firstEpochStartIn
             address(bPDTOFT), // PDT address
-            msg.sender // initial owner
+            msg.sender // DEFAULT_ADMIN_ROLE
         );
 
-        owner = bPDTStakingV2.owner();
+        owner = bPDTStakingV2.getRoleMember(DEFAULT_ADMIN_ROLE, 0);
 
         vm.startPrank(owner);
+        bPDTStakingV2.grantRole(MANAGER_ROLE, manager1);
+        bPDTStakingV2.grantRole(MANAGER_ROLE, manager2);
+        vm.stopPrank();
+
+        vm.startPrank(manager1);
         bPDTStakingV2.registerNewRewardToken(address(bPRIME));
         vm.stopPrank();
     }
@@ -87,6 +99,10 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         assertEq(bPDTStakingV2.pdt(), address(bPDTOFT));
     }
 
+    ///////////////////////////////////////////////////////////////////////////////////////////
+    /// OWNER FUNCTIONS
+    ///////////////////////////////////////////////////////////////////////////////////////////
+
     /**
      * updateEpochLength
      */
@@ -96,11 +112,30 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         bPDTStakingV2.updateEpochLength(0);
     }
 
-    function testFuzz_updateEpochLength_RevertIf_NonOwnerUpdate(uint128 _newEpochLength) public {
-        uint256 newEpochLength = uint256(_newEpochLength) + 1;
+    function test_updateEpochLength_RevertIf_NonAdminUpdateEpochLength() public {
+        uint256 newEpochLength = 1000000;
 
-        vm.expectRevert();
+        vm.startPrank(staker);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                staker,
+                DEFAULT_ADMIN_ROLE
+            )
+        );
         bPDTStakingV2.updateEpochLength(newEpochLength);
+        vm.stopPrank();
+
+        vm.startPrank(manager1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                manager1,
+                DEFAULT_ADMIN_ROLE
+            )
+        );
+        bPDTStakingV2.updateEpochLength(newEpochLength);
+        vm.stopPrank();
     }
 
     function testFuzz_updateEpochLength_OwnerUpdateEpochLength(uint128 _newEpochLength) public {
@@ -177,10 +212,14 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
     }
 
     /**
-     * registerNewRewardToken & getActiveRewardTokenList
+     * updateRewardDuration
      */
 
-    function test_registerNewRewardToken_RevertIf_NonOwnerTry() public {
+    /**
+     * registerNewRewardToken
+     */
+
+    function test_registerNewRewardToken_RevertIf_NonManagerCallFunction() public {
         vm.expectRevert();
         bPDTStakingV2.registerNewRewardToken(address(bPROMPT));
     }
@@ -192,7 +231,19 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         vm.stopPrank();
     }
 
-    function test_registerNewRewardToken_OwnerCanRegister() public {
+    function test_registerNewRewardToken_ManagerCanRegister() public {
+        vm.startPrank(manager1);
+        // add PROMPT as a new active reward token
+        bPDTStakingV2.registerNewRewardToken(address(bPROMPT));
+
+        // check reward token list
+        assertEq(bPDTStakingV2.rewardTokenList(0), address(bPRIME));
+        assertEq(bPDTStakingV2.rewardTokenList(1), address(bPROMPT));
+
+        vm.stopPrank();
+    }
+
+    function test_registerNewRewardToken_DefaultAdminCanRegister() public {
         vm.startPrank(owner);
         // add PROMPT as a new active reward token
         bPDTStakingV2.registerNewRewardToken(address(bPROMPT));
@@ -234,6 +285,10 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
 
         _moveToNextEpoch(2);
     }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////
+    /// EXTERNAL FUNCTIONS
+    ///////////////////////////////////////////////////////////////////////////////////////////
 
     /**
      * stake
@@ -409,7 +464,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
     }
 
     /**
-     * claim
+     * claim & withdrawRewardTokens
      */
 
     function test_claim_RevertIf_ClaimDuringEpoch0() public {
@@ -704,6 +759,17 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         uint256 _expiredRewardsAmount = bPRIME.balanceOf(address(bPDTStakingV2)) - POOL_SIZE;
         assertEq(_expiredRewardsAmount, POOL_SIZE * nExpiredEpochs);
 
+        // Non-owners shouldn't be able to withdraw expired rewards
+        vm.startPrank(staker);
+        vm.expectRevert();
+        bPDTStakingV2.withdrawRewardTokens(address(bPRIME), _expiredRewardsAmount);
+        vm.stopPrank();
+
+        vm.startPrank(manager1);
+        vm.expectRevert();
+        bPDTStakingV2.withdrawRewardTokens(address(bPRIME), _expiredRewardsAmount);
+        vm.stopPrank();
+
         // Owner should be able to withdraw expired rewards
         vm.startPrank(owner);
         bPDTStakingV2.withdrawRewardTokens(address(bPRIME), _expiredRewardsAmount);
@@ -784,64 +850,9 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         vm.stopPrank();
     }
 
-    /**
-     * claimAmountForEpoch
-     */
-
-    function test_claimAmountForEpoch() public {
-        /// EPOCH 0
-
-        // register aero as a reward token
-        vm.startPrank(owner);
-        bPDTStakingV2.registerNewRewardToken(address(bPROMPT));
-        vm.stopPrank();
-
-        // move to epoch 1
-        _creditPRIMERewardPool(100);
-        _creditPROMPTRewardPool(200);
-        _moveToNextEpoch(0);
-
-        /// EPOCH 1
-
-        // staker1 stakes 10
-        bPDTOFT.mint(staker1, 10);
-        vm.startPrank(staker1);
-        bPDTOFT.approve(address(bPDTStakingV2), 10);
-        bPDTStakingV2.stake(staker1, 10);
-        vm.stopPrank();
-
-        // staker2 stakes 40
-        bPDTOFT.mint(staker2, 40);
-        vm.startPrank(staker2);
-        bPDTOFT.approve(address(bPDTStakingV2), 40);
-        bPDTStakingV2.stake(staker2, 40);
-        vm.stopPrank();
-
-        // move to epoch 2
-        _creditPRIMERewardPool(10);
-        _creditPROMPTRewardPool(20);
-        _moveToNextEpoch(1);
-
-        /// EPOCH 2
-
-        assertEq(
-            bPDTStakingV2.claimAmountForEpoch(staker1, 1, address(bPRIME)),
-            (100 * 10) / (10 + 40)
-        );
-        assertEq(
-            bPDTStakingV2.claimAmountForEpoch(staker1, 1, address(bPROMPT)),
-            (200 * 10) / (10 + 40)
-        );
-
-        assertEq(
-            bPDTStakingV2.claimAmountForEpoch(staker2, 1, address(bPRIME)),
-            (100 * 40) / (10 + 40)
-        );
-        assertEq(
-            bPDTStakingV2.claimAmountForEpoch(staker2, 1, address(bPROMPT)),
-            (200 * 40) / (10 + 40)
-        );
-    }
+    ///////////////////////////////////////////////////////////////////////////////////////////
+    /// VIEW FUNCTIONS
+    ///////////////////////////////////////////////////////////////////////////////////////////
 
     /**
      * Pending Rewards
@@ -903,6 +914,65 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
         assertEq(bPDTStakingV2.pendingRewards(address(bPRIME)), 300);
     }
 
+    /**
+     * claimAmountForEpoch
+     */
+
+    function test_claimAmountForEpoch() public {
+        /// EPOCH 0
+
+        // register aero as a reward token
+        vm.startPrank(owner);
+        bPDTStakingV2.registerNewRewardToken(address(bPROMPT));
+        vm.stopPrank();
+
+        // move to epoch 1
+        _creditPRIMERewardPool(100);
+        _creditPROMPTRewardPool(200);
+        _moveToNextEpoch(0);
+
+        /// EPOCH 1
+
+        // staker1 stakes 10
+        bPDTOFT.mint(staker1, 10);
+        vm.startPrank(staker1);
+        bPDTOFT.approve(address(bPDTStakingV2), 10);
+        bPDTStakingV2.stake(staker1, 10);
+        vm.stopPrank();
+
+        // staker2 stakes 40
+        bPDTOFT.mint(staker2, 40);
+        vm.startPrank(staker2);
+        bPDTOFT.approve(address(bPDTStakingV2), 40);
+        bPDTStakingV2.stake(staker2, 40);
+        vm.stopPrank();
+
+        // move to epoch 2
+        _creditPRIMERewardPool(10);
+        _creditPROMPTRewardPool(20);
+        _moveToNextEpoch(1);
+
+        /// EPOCH 2
+
+        assertEq(
+            bPDTStakingV2.claimAmountForEpoch(staker1, 1, address(bPRIME)),
+            (100 * 10) / (10 + 40)
+        );
+        assertEq(
+            bPDTStakingV2.claimAmountForEpoch(staker1, 1, address(bPROMPT)),
+            (200 * 10) / (10 + 40)
+        );
+
+        assertEq(
+            bPDTStakingV2.claimAmountForEpoch(staker2, 1, address(bPRIME)),
+            (100 * 40) / (10 + 40)
+        );
+        assertEq(
+            bPDTStakingV2.claimAmountForEpoch(staker2, 1, address(bPROMPT)),
+            (200 * 40) / (10 + 40)
+        );
+    }
+
     /// Helper Functions ///
 
     function _creditPRIMERewardPool(uint256 _amount) internal {
@@ -916,7 +986,7 @@ contract PDTStakingV2Test is Test, TestHelperOz5, IPDTStakingV2 {
     function _moveToNextEpoch(uint256 _currentEpochId) internal {
         (, uint256 epochEndTime, ) = bPDTStakingV2.epoch(_currentEpochId);
         vm.warp(epochEndTime + 1 days);
-        vm.startPrank(owner);
+        vm.startPrank(manager1);
         bPDTStakingV2.distribute();
         vm.stopPrank();
     }
