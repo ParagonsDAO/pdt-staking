@@ -12,77 +12,103 @@ import {IPDTStakingV2} from "../interfaces/IPDTStakingV2.sol";
  * @notice Contract that allows users to stake PDT
  * @author Michael
  */
-contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, AccessControlEnumerable {
+contract PDTStakingV2 is ReentrancyGuard, AccessControlEnumerable, IPDTStakingV2 {
     using SafeERC20 for IERC20;
 
-    /// NEW ROLES ///
+    ////////////////////////////////////////////////////////////////////////////////
+    /// STATE VARIABLES
+    ////////////////////////////////////////////////////////////////////////////////
+
+    /// NEW ROLES
 
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
-    /// STATE VARIABLES ///
+    /// Epoch Configuration
 
-    /**
-     * Epoch Configuration
+    /*
+     * @notice Current epoch id
      */
-
-    /// @notice Current epoch id
     uint256 public currentEpochId;
 
-    /// @notice The duration of each epoch in seconds
+    /*
+     * @notice The duration of each epoch in seconds
+     */
     uint256 public epochLength;
 
-    /// @notice The time-to-live duration for rewards in seconds
-    uint256 public rewardDuration = 104 weeks; // initial reward duration = 2 years
+    /*
+     * @notice The time-to-live duration for rewards in seconds
+     */
+    uint256 public rewardEpochsThreshold = 104 weeks; // initial reward duration = 2 years
 
-    /// @notice Epoch id to epoch details
+    /*
+     * @notice Epoch id to epoch details
+     */
     mapping(uint256 => Epoch) public epoch;
 
-    /**
-     * Staking Metrics
-     */
+    /// Staking Metrics
 
-    /// @notice Total amount of staked PDT within contract
+    /*
+     * @notice Total amount of staked PDT within contract
+     */
     uint256 public totalStaked;
 
-    /// @notice The immutable address of PDT token utilized for staking
+    /*
+     * @notice The immutable address of PDT token utilized for staking
+     */
     address public immutable pdt;
 
-    /**
-     * Reward Tokens
-     */
+    /// Reward Tokens
 
-    /// @notice Dynamic array to store reward token addresses
+    /*
+     * @notice Dynamic array to store reward token addresses
+     */
     address[] public rewardTokenList;
 
-    /// @notice Reward token to its unclaimed amount
+    /*
+     * @notice Reward token to its unclaimed amount
+     */
     mapping(address => uint256) public unclaimedRewards;
 
-    /// @notice Maps each reward token to their respective rewards allocation for every epoch
+    /*
+     * @notice Maps each reward token to their respective rewards allocation for every epoch
+     */
     mapping(address => mapping(uint256 => uint256)) public totalRewardsToDistribute;
 
-    /// @notice Maps each reward token to their respective claimed amount for every epoch
+    /*
+     * @notice Maps each reward token to their respective claimed amount for every epoch
+     */
     mapping(address => mapping(uint256 => uint256)) public totalRewardsClaimed;
 
-    /**
-     * User Information
-     */
+    /// User Information
 
-    /// @notice Account to the claim reward status of certain epoch id
+    /*
+     * @notice Account to the claim reward status of certain epoch id
+     */
     mapping(address => mapping(uint256 => bool)) public userClaimedEpoch;
 
-    /// @notice Account to its weight at a certain epoch
+    /*
+     * @notice Account to its weight at a certain epoch
+     */
     mapping(address => mapping(uint256 => uint256)) internal _userWeightAtEpoch;
 
-    /// @notice Account to the last interacted epoch id
+    /*
+     * @notice Account to the last interacted epoch id
+     */
     mapping(address => uint256) public epochLeftOff;
 
-    /// @notice Account to the last claimed epoch id
+    /*
+     * @notice Account to the last claimed epoch id
+     */
     mapping(address => uint256) public claimLeftOff;
 
-    /// @notice Account to the amount of staked tokens
+    /*
+     * @notice Account to the amount of staked tokens
+     */
     mapping(address => uint256) public stakesByUser;
 
-    /// CONSTRUCTOR ///
+    ////////////////////////////////////////////////////////////////////////////////
+    /// CONSTRUCTOR
+    ////////////////////////////////////////////////////////////////////////////////
 
     /**
      * @notice Constructs the contract.
@@ -110,7 +136,9 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, AccessControlEnumerable
         pdt = pdtAddress;
     }
 
-    /// OWNER FUNCTIONS ///
+    ////////////////////////////////////////////////////////////////////////////////
+    /// OWNER FUNCTIONS
+    ////////////////////////////////////////////////////////////////////////////////
 
     /**
      * @notice Update epoch length
@@ -135,22 +163,24 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, AccessControlEnumerable
     }
 
     /**
-     * @notice Update reward duration
-     * @param newRewardDuration The time-to-live duration for rewards in seconds
+     * @notice Update the number of epochs in which rewards are claimable
+     * @param newRewardEpochsThreshold The number of epochs
      *
      * Requirements:
      *
      * - msg.sender should has DEFAULT_ADMIN_ROLE role
-     * - `newRewardDuration` should be longer than the current epoch length
+     * - `newRewardEpochsThreshold` shouldn't be zero
      *
      * Emits an {UpdateRewardDuration} event.
      */
-    function updateRewardDuration(uint256 newRewardDuration) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(newRewardDuration > epochLength, "Invalid reward duration");
+    function updateRewardEpochsThreshold(
+        uint256 newRewardEpochsThreshold
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(newRewardEpochsThreshold > epochLength, "Invalid reward duration");
 
-        rewardDuration = newRewardDuration;
+        rewardEpochsThreshold = newRewardEpochsThreshold;
 
-        emit UpdateRewardDuration(newRewardDuration);
+        emit UpdateRewardDuration(newRewardEpochsThreshold);
     }
 
     /**
@@ -288,7 +318,9 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, AccessControlEnumerable
         emit WithdrawRewardToken(rewardToken, amount);
     }
 
-    /// EXTERNAL FUNCTIONS ///
+    ////////////////////////////////////////////////////////////////////////////////
+    /// EXTERNAL FUNCTIONS
+    ////////////////////////////////////////////////////////////////////////////////
 
     /// @inheritdoc IPDTStakingV2
     function stake(address to, uint256 amount) external nonReentrant {
@@ -409,6 +441,9 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, AccessControlEnumerable
 
     /// @inheritdoc IPDTStakingV2
     function transferStakes(address to, uint256 amount) external nonReentrant {
+        if (block.timestamp > epoch[currentEpochId].endTime) {
+            revert OutOfEpoch();
+        }
         if (to == address(0) || to == msg.sender || amount == 0) {
             revert InvalidStakesTransfer();
         }
@@ -421,7 +456,9 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, AccessControlEnumerable
         emit TransferStakes(msg.sender, to, currentEpochId, amount);
     }
 
-    /// VIEW FUNCTIONS ///
+    ////////////////////////////////////////////////////////////////////////////////
+    /// VIEW FUNCTIONS
+    ////////////////////////////////////////////////////////////////////////////////
 
     /**
      * @notice Returns current pending rewards of a specific reward token for next epoch
@@ -490,13 +527,13 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, AccessControlEnumerable
      */
     function rewardsActiveFrom() public view returns (uint256 bottomEpochId_) {
         uint256 _currentEpochId = currentEpochId;
-        uint256 _rewardDuration = rewardDuration;
+        uint256 _rewardEpochsThreshold = rewardEpochsThreshold;
         uint256 _end = epoch[_currentEpochId].startTime;
 
         for (uint256 i = _currentEpochId; i > 0; ) {
             uint256 _start = epoch[i - 1].startTime;
 
-            if (_end - _start > _rewardDuration) {
+            if (_end - _start > _rewardEpochsThreshold) {
                 bottomEpochId_ = i;
                 break;
             }
@@ -507,7 +544,9 @@ contract PDTStakingV2 is IPDTStakingV2, ReentrancyGuard, AccessControlEnumerable
         }
     }
 
-    /// INTERNAL FUNCTIONS ///
+    ////////////////////////////////////////////////////////////////////////////////
+    /// INTERNAL FUNCTIONS
+    ////////////////////////////////////////////////////////////////////////////////
 
     /**
      * @notice Set epochs of `user` that they left off on

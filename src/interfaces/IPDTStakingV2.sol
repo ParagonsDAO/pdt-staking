@@ -9,12 +9,6 @@ interface IPDTStakingV2 {
     /// EVENTS ///
 
     /**
-     * @notice Emitted if epoch 0 is pushed back
-     * @param newEndTime New end time of epoch 0
-     */
-    event PushBackEpoch0(uint256 indexed newEndTime);
-
-    /**
      * @notice Emitted if epoch length is updated
      * @param epochId The epoch Id that the epoch length is updated in
      * @param previousEpochLength Previous length of epochs
