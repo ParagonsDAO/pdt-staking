@@ -5,7 +5,7 @@ pragma solidity ^0.8.24;
  * @title PDT Staking v2 Interface
  * @dev Interface for managing token stake.
  */
-interface IPDTStakingV2 {
+interface IStakedPDT {
     /// EVENTS ///
 
     /**
@@ -64,16 +64,16 @@ interface IPDTStakingV2 {
     );
 
     /**
-     * @notice Emitted upon staker transfers stakes to another user
-     * @param from The address of who is sending stakes
-     * @param to The address of who is receiving stakes
-     * @param epochId Current epoch id
-     * @param amount The amount that is transfered
+     * @notice Emitted upon staker claiming
+     * @param staker Address of who claimed rewards
+     * @param currentEpochId Current epoch id
+     * @param rewardToken Address of expired reward token
+     * @param amount Amount expired
      */
-    event TransferStakes(
-        address indexed from,
-        address indexed to,
-        uint256 indexed epochId,
+    event RewardsExpired(
+        address indexed staker,
+        uint256 indexed currentEpochId,
+        address indexed rewardToken,
         uint256 amount
     );
 
@@ -91,6 +91,11 @@ interface IPDTStakingV2 {
     event UpdateRewardDuration(uint256 indexed newRewardDuration);
 
     /// ERRORS ///
+
+    /**
+     * @notice The number of rewards expiry threshold can't be zero
+     */
+    error InvalidRewardsExpiryThreshold();
 
     /**
      * @notice Can't withdraw unregistered reward token
@@ -125,22 +130,24 @@ interface IPDTStakingV2 {
     error OutOfEpoch();
 
     /**
-     * @notice Can't stake zero amount.
+     * @notice Can't stake zero.
      */
     error InvalidStakeAmount();
 
     /**
-     * @notice Can't unstaking zero or more than staked
-     * @param amountStaked Total amount of PDT staked by the user
-     * @param amountUnstaking The amount of PDT to unstake
+     * @notice Can't unstake zero.
      */
-    error InvalidUnstakeAmount(uint256 amountStaked, uint256 amountUnstaking);
+    error InvalidUnstakeAmount();
 
     /**
-     * @notice Can't transfer zero amount of stakes, can't transfer to zero address
-     * or to msg.sender.
-     *
-     * Emits a {TransferStakes} event.
+     * @notice To prevent flash-loan attack, unstake is not allowed for 1 day from
+     * the last staked timestamp.
+     */
+    error UnstakeLocked();
+
+    /**
+     * @notice Can't transfer zero amount of stakes, or to non-whitelisted
+     * addresses.
      */
     error InvalidStakesTransfer();
 
@@ -199,16 +206,4 @@ interface IPDTStakingV2 {
      * Emits a {Claim} event.
      */
     function claim(address to) external;
-
-    /**
-     * @notice Transfer some amount of stakes to another wallet
-     * @param to The target wallet address for transfering stakes
-     * @param amount The amount of stakes to transfer to `to` address
-     *
-     * Requirements:
-     *
-     * - `to` shouldn't be zero address nor msg.sender
-     * - `amount` shouldn't be zero
-     */
-    function transferStakes(address to, uint256 amount) external;
 }
