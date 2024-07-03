@@ -41,6 +41,8 @@ contract StakedPDTTestBase is Test, TestHelperOz5, IStakedPDT {
     address staker1 = address(0x111);
     address staker2 = address(0x222);
     address staker3 = address(0x333);
+    address staker4 = address(0x444);
+    address staker5 = address(0x555);
 
     uint256 initialEpochLength = 4 weeks;
     uint256 initialFirstEpochStartIn = 1 days;

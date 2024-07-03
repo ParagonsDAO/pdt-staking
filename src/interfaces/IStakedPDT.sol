@@ -140,12 +140,6 @@ interface IStakedPDT {
     error InvalidUnstakeAmount();
 
     /**
-     * @notice To prevent flash-loan attack, unstake is not allowed for 1 day from
-     * the last staked timestamp.
-     */
-    error UnstakeLocked();
-
-    /**
      * @notice Can't transfer zero amount of stakes, or to non-whitelisted
      * addresses.
      */
@@ -163,6 +157,16 @@ interface IStakedPDT {
         uint256 startTime;
         uint256 endTime;
         uint256 weightAtEnd;
+    }
+
+    /**
+     * @notice Stake details for user
+     * @param lastInteraction Last timestamp user interacted
+     * @param weightAtLastInteraction Weight of stake at last interaction
+     */
+    struct StakeDetails {
+        uint256 lastInteraction;
+        uint256 weightAtLastInteraction;
     }
 
     /// EXTERNAL FUNCTIONS ///

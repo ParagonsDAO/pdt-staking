@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 
 import {IStakedPDT} from "../interfaces/IStakedPDT.sol";
@@ -58,6 +59,16 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
     address public immutable pdt;
 
     /**
+     * @notice Timestamp of lastest stake/unstake action on contract
+     */
+    uint256 public contractLastInteraction;
+
+    /**
+     * @notice Total weight of contract
+     */
+    uint256 internal _contractWeight;
+
+    /**
      * @notice Mapping of contract addresses to their whitelisted status
      * @dev stPDT is not allowed to be transferred to non-whitelisted
      * addresses except for minting and burning cases.
@@ -109,9 +120,9 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
     mapping(address => uint256) public claimLeftOff;
 
     /**
-     * @notice Mapping of staker addresses to their last staked timestamp
+     * @notice Mapping of accounts to their stake details
      */
-    mapping(address => uint256) public stakeTimestamp;
+    mapping(address => StakeDetails) public stakeDetails;
 
     ////////////////////////////////////////////////////////////////////////////////
     /// CONSTRUCTOR
@@ -244,7 +255,10 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         Epoch memory _currentEpoch = epoch[_currentEpochId];
 
         if (block.timestamp >= _currentEpoch.endTime) {
-            epoch[_currentEpochId].weightAtEnd = totalSupply();
+            epoch[_currentEpochId].weightAtEnd = contractWeight();
+            // Reset contract weight for new epoch
+            _contractWeight = 0;
+
             ++_currentEpochId;
             currentEpochId = _currentEpochId;
 
@@ -353,7 +367,9 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
 
     /// @inheritdoc IStakedPDT
     function stake(address to, uint256 amount) external nonReentrant {
-        if (block.timestamp > epoch[currentEpochId].endTime) {
+        Epoch memory _epoch = epoch[currentEpochId];
+
+        if (block.timestamp > _epoch.endTime) {
             revert OutOfEpoch();
         }
         if (amount == 0) {
@@ -361,10 +377,30 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         }
 
         _setUserWeightAtEpoch(to);
+        _adjustContractWeight();
+
+        StakeDetails memory _stake = stakeDetails[to];
+        uint256 _amountStaked = balanceOf(to);
+
+        if (_stake.lastInteraction > _epoch.startTime) {
+            uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+                block.timestamp,
+                _stake.lastInteraction,
+                _amountStaked
+            );
+            _stake.weightAtLastInteraction += _additionalWeight;
+        } else {
+            _stake.weightAtLastInteraction = _weightIncreaseSinceInteraction(
+                block.timestamp,
+                _epoch.startTime,
+                _amountStaked
+            );
+        }
+
+        _stake.lastInteraction = block.timestamp;
+        stakeDetails[to] = _stake;
+
         _mint(to, amount);
-
-        stakeTimestamp[to] = block.timestamp;
-
         IERC20(pdt).safeTransferFrom(msg.sender, address(this), amount);
 
         emit Stake(to, amount, currentEpochId);
@@ -372,13 +408,36 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
 
     /// @inheritdoc IStakedPDT
     function unstake(address to, uint256 amount) external nonReentrant {
-        if (block.timestamp > epoch[currentEpochId].endTime) revert OutOfEpoch();
-        if (amount == 0) revert InvalidUnstakeAmount();
-        if (stakeTimestamp[to] + 1 days > block.timestamp) revert UnstakeLocked();
+        Epoch memory _epoch = epoch[currentEpochId];
+        if (block.timestamp > _epoch.endTime) revert OutOfEpoch();
+
+        uint256 _amountStaked = balanceOf(msg.sender);
+        if (amount == 0 || amount > _amountStaked) revert InvalidUnstakeAmount();
 
         _setUserWeightAtEpoch(msg.sender);
-        _burn(msg.sender, amount);
+        _adjustContractWeight();
 
+        StakeDetails memory _stake = stakeDetails[msg.sender];
+
+        if (_stake.lastInteraction > _epoch.startTime) {
+            uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+                block.timestamp,
+                _stake.lastInteraction,
+                _amountStaked
+            );
+            _stake.weightAtLastInteraction += _additionalWeight;
+        } else {
+            _stake.weightAtLastInteraction = _weightIncreaseSinceInteraction(
+                block.timestamp,
+                _epoch.startTime,
+                _amountStaked
+            );
+        }
+
+        _stake.lastInteraction = block.timestamp;
+        stakeDetails[msg.sender] = _stake;
+
+        _burn(msg.sender, amount);
         IERC20(pdt).safeTransfer(to, amount);
 
         emit Unstake(msg.sender, amount, currentEpochId);
@@ -404,9 +463,9 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         uint256[] memory _expiredRewards = new uint256[](_tokenListSize);
 
         for (uint256 itEpochId; itEpochId < _currentEpochId; ) {
-            uint256 _contractWeight = contractWeightAtEpoch(itEpochId);
+            uint256 _contractWeightAtEpoch = contractWeightAtEpoch(itEpochId);
 
-            if (!userClaimedEpoch[msg.sender][itEpochId] && _contractWeight > 0) {
+            if (!userClaimedEpoch[msg.sender][itEpochId] && _contractWeightAtEpoch > 0) {
                 userClaimedEpoch[msg.sender][itEpochId] = true;
 
                 uint256 _userWeight = _userWeightAtEpoch[msg.sender][itEpochId];
@@ -416,7 +475,8 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
                         address _token = _tokenList[itTokenIdex];
                         uint256 _totalRewards = totalRewardsToDistribute[_token][itEpochId];
                         uint256 _totalRewardsClaimed = totalRewardsClaimed[_token][itEpochId];
-                        uint256 _epochRewards = (_totalRewards * _userWeight) / _contractWeight;
+                        uint256 _epochRewards = (_totalRewards * _userWeight) /
+                            _contractWeightAtEpoch;
 
                         if (_totalRewardsClaimed + _epochRewards > _totalRewards) {
                             _epochRewards = _totalRewards - _totalRewardsClaimed;
@@ -487,15 +547,6 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
     }
 
     /**
-     * @notice Returns total weight of contract at `epochId`
-     * @param epochId Epoch to return total weight of contract for
-     * @return contractWeight_ Weight of contract at the end of `epochId`
-     */
-    function contractWeightAtEpoch(uint256 epochId) public view returns (uint256 contractWeight_) {
-        contractWeight_ = epoch[epochId].weightAtEnd;
-    }
-
-    /**
      * @notice Returns `user`'s claimable amount of rewards for `epochId`
      * @param user Address to see `claimable_` for `epochId`
      * @param epochId Id of epoch wanting to get `claimable_` for
@@ -509,14 +560,14 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
     ) external view returns (uint256 claimable_) {
         bool _hasClaimed = userClaimedEpoch[user][epochId];
         uint256 _userWeight = userWeightAtEpoch(user, epochId);
-        uint256 _contractWeight = contractWeightAtEpoch(epochId);
+        uint256 _contractWeightAtEpoch = contractWeightAtEpoch(epochId);
         uint256 _totalRewards = totalRewardsToDistribute[rewardToken][epochId];
 
-        if (_hasClaimed || _contractWeight == 0 || _userWeight == 0 || _totalRewards == 0) {
+        if (_hasClaimed || _contractWeightAtEpoch == 0 || _userWeight == 0 || _totalRewards == 0) {
             return 0;
         }
 
-        claimable_ = (_totalRewards * _userWeight) / _contractWeight;
+        claimable_ = (_totalRewards * _userWeight) / _contractWeightAtEpoch;
     }
 
     /**
@@ -529,14 +580,81 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         address user,
         uint256 epochId
     ) public view returns (uint256 userWeight_) {
+        require(epochId < currentEpochId, "Invalid epoch id");
+
         uint256 _epochLeftOff = epochLeftOff[user];
         uint256 _amountStaked = balanceOf(user);
 
         if (_epochLeftOff > epochId) {
             userWeight_ = _userWeightAtEpoch[user][epochId];
         } else {
-            userWeight_ = _amountStaked;
+            Epoch memory _epoch = epoch[epochId];
+            StakeDetails memory _stake = stakeDetails[user];
+            if (_stake.lastInteraction > _epoch.startTime) {
+                userWeight_ =
+                    _stake.weightAtLastInteraction +
+                    _weightIncreaseSinceInteraction(
+                        _epoch.endTime,
+                        _stake.lastInteraction,
+                        _amountStaked
+                    );
+            } else {
+                userWeight_ = _weightIncreaseSinceInteraction(
+                    _epoch.endTime,
+                    _epoch.startTime,
+                    _amountStaked
+                );
+            }
         }
+    }
+
+    /**
+     * @notice Returns total weight of `user`
+     * @param user Address to calculate `userWeight_` of
+     * @return userWeight_  Weight of `user`
+     */
+    function userTotalWeight(address user) public view returns (uint256 userWeight_) {
+        Epoch memory _epoch = epoch[currentEpochId];
+        StakeDetails memory _stake = stakeDetails[user];
+        uint256 _balance = balanceOf(user);
+
+        if (_stake.lastInteraction > _epoch.startTime) {
+            uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+                Math.min(block.timestamp, _epoch.endTime),
+                _stake.lastInteraction,
+                _balance
+            );
+            userWeight_ = _additionalWeight + _stake.weightAtLastInteraction;
+        } else {
+            userWeight_ = _weightIncreaseSinceInteraction(
+                Math.min(block.timestamp, _epoch.endTime),
+                _epoch.startTime,
+                _balance
+            );
+        }
+    }
+
+    /**
+     * @notice Returns total weight of contract at `epochId`
+     * @param epochId Epoch to return total weight of contract for
+     * @return contractWeight_ Weight of contract at the end of `epochId`
+     */
+    function contractWeightAtEpoch(uint256 epochId) public view returns (uint256 contractWeight_) {
+        contractWeight_ = epoch[epochId].weightAtEnd;
+    }
+
+    /**
+     * @notice Returns current total weight of contract
+     * @return contractWeight_ Total current weight of contract
+     */
+    function contractWeight() public view returns (uint256 contractWeight_) {
+        Epoch memory _epoch = epoch[currentEpochId];
+        uint256 _weightIncrease = _weightIncreaseSinceInteraction(
+            Math.min(block.timestamp, _epoch.endTime),
+            Math.max(contractLastInteraction, _epoch.startTime),
+            totalSupply()
+        );
+        contractWeight_ = _weightIncrease + _contractWeight;
     }
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -544,7 +662,32 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
     ////////////////////////////////////////////////////////////////////////////////
 
     /**
-     * @notice Set epochs of `user` that they left off on
+     * @notice Returns additional weight since `lastInteraction` at `timestamp`
+     * @param timestamp Timestamp calculating on
+     * @param lastInteraction Last interaction time
+     * @param baseAmount Base amount of PDT to account for
+     * @return additionalWeight_  Additional weight since `lastinteraction` at `timestamp`
+     */
+    function _weightIncreaseSinceInteraction(
+        uint256 timestamp,
+        uint256 lastInteraction,
+        uint256 baseAmount
+    ) internal pure returns (uint256 additionalWeight_) {
+        uint256 _timePassed = timestamp - lastInteraction;
+        uint256 _multiplierReceived = (1e18 * _timePassed) / 1 days;
+        additionalWeight_ = (baseAmount * _multiplierReceived) / 1e18;
+    }
+
+    /**
+     * @notice Adjust contract weight since last interaction
+     */
+    function _adjustContractWeight() internal {
+        _contractWeight = contractWeight();
+        contractLastInteraction = block.timestamp;
+    }
+
+    /**
+     * @notice Set user weights of past epochs after they left off
      * @param user Address of user being updated
      */
     function _setUserWeightAtEpoch(address user) internal {
@@ -554,8 +697,28 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         if (_epochLeftOff != _currentEpochId) {
             uint256 _amountStaked = balanceOf(user);
             if (_amountStaked > 0) {
+                StakeDetails memory _stake = stakeDetails[user];
+
                 for (_epochLeftOff; _epochLeftOff < _currentEpochId; ) {
-                    _userWeightAtEpoch[user][_epochLeftOff] = _amountStaked;
+                    Epoch memory _epoch = epoch[_epochLeftOff];
+
+                    if (_stake.lastInteraction > _epoch.startTime) {
+                        uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+                            _epoch.endTime,
+                            _stake.lastInteraction,
+                            _amountStaked
+                        );
+
+                        _userWeightAtEpoch[user][_epochLeftOff] =
+                            _stake.weightAtLastInteraction +
+                            _additionalWeight;
+                    } else {
+                        _userWeightAtEpoch[user][_epochLeftOff] = _weightIncreaseSinceInteraction(
+                            _epoch.endTime,
+                            _epoch.startTime,
+                            _amountStaked
+                        );
+                    }
 
                     unchecked {
                         ++_epochLeftOff;
