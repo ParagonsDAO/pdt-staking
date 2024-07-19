@@ -171,16 +171,20 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      *
      * - Only EPOCH_MANAGER can update epoch length
      * - `newEpochLength` shouldn't be zero
+     * - Updated epoch end time should be greater than `contractLastInteraction`
      *
      * Emits an {UpdateEpochLength} event.
      */
     function updateEpochLength(uint256 newEpochLength) external onlyRole(EPOCH_MANAGER) {
-        require(newEpochLength > 0, "Invalid new epoch length");
+        uint256 newEndTime = epoch[currentEpochId].startTime + newEpochLength;
+        require(
+            newEpochLength > 0 && newEndTime > contractLastInteraction,
+            "Invalid new epoch length"
+        );
 
         uint256 previousEpochLength = epochLength;
         epochLength = newEpochLength;
-
-        epoch[currentEpochId].endTime = epoch[currentEpochId].startTime + newEpochLength;
+        epoch[currentEpochId].endTime = newEndTime;
 
         emit UpdateEpochLength(currentEpochId, previousEpochLength, newEpochLength);
     }
