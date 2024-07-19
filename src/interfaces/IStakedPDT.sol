@@ -30,9 +30,16 @@ interface IStakedPDT {
     /**
      * @notice Emitted if a reward token is unregistered
      * @param epochId Current epoch id
-     * @param rewardToken Address of unregistered reward token 
+     * @param rewardToken Address of unregistered reward token
      */
     event UnregisterRewardToken(uint256 indexed epochId, address indexed rewardToken);
+
+    /**
+     * @notice Emitted if a contract address is whitelisted or not
+     * @param value Address of the contract
+     * @param isWhitelisted Boolean true/false
+     */
+    event UpdateWhitelistedContract(address indexed value, bool indexed isWhitelisted);
 
     /**
      * @notice Emitted if a new epoch is started

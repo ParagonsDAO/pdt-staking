@@ -375,12 +375,16 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      * Requirements:
      *
      * - Only TOKEN_MANAGER can update contract whitelist
+     *
+     * Emits {UpdateWhitelistedContract} event.
      */
     function updateWhitelistedContract(
         address value,
         bool shouldWhitelist
     ) external onlyRole(TOKEN_MANAGER) {
         whitelistedContracts[value] = shouldWhitelist;
+
+        emit UpdateWhitelistedContract(value, shouldWhitelist);
     }
 
     ////////////////////////////////////////////////////////////////////////////////
