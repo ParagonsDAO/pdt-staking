@@ -26,6 +26,10 @@ contract StakedPDTRegisterNewRewardTokenTest is StakedPDTTestBase {
         assertEq(bStakedPDT.rewardTokenList(0), bPRIMEAddress);
         assertEq(bStakedPDT.rewardTokenList(1), bPROMPTAddress);
 
+        // should not allow to add PDT token
+        vm.expectRevert("Invalid reward token");
+        bStakedPDT.registerNewRewardToken(bPDTOFTAddress);
+
         vm.stopPrank();
     }
 

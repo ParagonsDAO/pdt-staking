@@ -219,7 +219,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      * Emits a {RegisterNewRewardToken} event.
      */
     function registerNewRewardToken(address newRewardToken) external onlyRole(TOKEN_MANAGER) {
-        require(newRewardToken != address(0), "Invalid reward token");
+        require(newRewardToken != address(0) && newRewardToken != pdt, "Invalid reward token");
 
         uint256 numOfRewardTokens = rewardTokenList.length;
 
