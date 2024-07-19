@@ -284,10 +284,9 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
 
             uint256 _nTokenTypes = rewardTokenList.length;
             uint256 _nTokenTypesForNextEpoch;
-            address[] memory _tokenList = rewardTokenList;
 
             for (uint256 itTokenIndex; itTokenIndex < _nTokenTypes; ) {
-                address _token = _tokenList[itTokenIndex];
+                address _token = rewardTokenList[itTokenIndex];
                 uint256 _rewardBalance = IERC20(_token).balanceOf(address(this));
                 uint256 _rewardsToDistribute = _rewardBalance - unclaimedRewards[_token];
 
@@ -340,12 +339,11 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
             revert InvalidWithdrawAmount();
         }
 
-        address[] memory _tokenList = rewardTokenList;
-        uint256 _tokenListSize = _tokenList.length;
+        uint256 _tokenListSize = rewardTokenList.length;
         uint8 isRegistered = 0;
 
         for (uint256 itTokenIndex; itTokenIndex < _tokenListSize; ) {
-            if (_tokenList[itTokenIndex] == rewardToken) {
+            if (rewardTokenList[itTokenIndex] == rewardToken) {
                 isRegistered = 1;
                 break;
             }
@@ -477,8 +475,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
             ? _currentEpochId - _rewardsExpiryThreshold
             : 1;
 
-        address[] memory _tokenList = rewardTokenList;
-        uint256 _tokenListSize = _tokenList.length;
+        uint256 _tokenListSize = rewardTokenList.length;
         uint256[] memory _pendingRewards = new uint256[](_tokenListSize);
         uint256[] memory _expiredRewards = new uint256[](_tokenListSize);
 
@@ -492,7 +489,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
 
                 if (_userWeight > 0) {
                     for (uint256 itTokenIdex; itTokenIdex < _tokenListSize; ) {
-                        address _token = _tokenList[itTokenIdex];
+                        address _token = rewardTokenList[itTokenIdex];
                         uint256 _totalRewards = totalRewardsToDistribute[_token][itEpochId];
                         uint256 _totalRewardsClaimed = totalRewardsClaimed[_token][itEpochId];
                         uint256 _epochRewards = (_totalRewards * _userWeight) /
@@ -528,7 +525,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         claimLeftOff[msg.sender] = _currentEpochId;
 
         for (uint256 itTokenIndex; itTokenIndex < _tokenListSize; ) {
-            address _token = _tokenList[itTokenIndex];
+            address _token = rewardTokenList[itTokenIndex];
             uint256 _pendingRewardsByToken = _pendingRewards[itTokenIndex];
 
             if (_pendingRewardsByToken > 0) {
