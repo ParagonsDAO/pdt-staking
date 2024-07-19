@@ -22,10 +22,17 @@ interface IStakedPDT {
 
     /**
      * @notice Emitted if a reward token is registered
-     * @param epochId The epoch Id that the reward token info is added or updated in
-     * @param rewardToken The address of new reward token
+     * @param epochId Current epoch id
+     * @param rewardToken Address of new reward token
      */
     event RegisterNewRewardToken(uint256 indexed epochId, address indexed rewardToken);
+
+    /**
+     * @notice Emitted if a reward token is unregistered
+     * @param epochId Current epoch id
+     * @param rewardToken Address of unregistered reward token 
+     */
+    event UnregisterRewardToken(uint256 indexed epochId, address indexed rewardToken);
 
     /**
      * @notice Emitted if a new epoch is started

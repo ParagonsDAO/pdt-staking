@@ -240,6 +240,26 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
     }
 
     /**
+     * @notice Unregister a reward token from reward token list
+     * @param index Index of reward token address to remove
+     *
+     * Requirements:
+     *
+     * - Only TOKEN_MANAGER can unregister reward token
+     *
+     * Emits an {UnregisterRewardToken} event.
+     */
+    function unregisterRewardToken(uint256 index) external onlyRole(TOKEN_MANAGER) {
+        require(index < rewardTokenList.length, "Index out of bounds");
+
+        address rewardToken = rewardTokenList[index];
+        rewardTokenList[index] = rewardTokenList[rewardTokenList.length - 1];
+        rewardTokenList.pop();
+
+        emit UnregisterRewardToken(currentEpochId, rewardToken);
+    }
+
+    /**
      * @notice Update epoch details if time
      *
      * Requirements:
