@@ -55,4 +55,22 @@ contract StakedPDTUnregisterRewardTokenTest is StakedPDTTestBase {
         bStakedPDT.rewardTokenList(1);
         assertEq(bStakedPDT.rewardTokenList(0), bPRIMEAddress);
     }
+
+    // should be able to remove any reward token
+    function test_unregisterRewardToken_RemoveAnyRewardToken() public {
+        vm.startPrank(tokenManager);
+
+        bStakedPDT.registerNewRewardToken(bPROMPTAddress);
+        bStakedPDT.unregisterRewardToken(0);
+        assertEq(bStakedPDT.rewardTokenList(0), bPROMPTAddress);
+
+        vm.expectRevert();
+        bStakedPDT.rewardTokenList(1);
+
+        bStakedPDT.unregisterRewardToken(0);
+        vm.expectRevert();
+        bStakedPDT.rewardTokenList(0);
+
+        vm.stopPrank();
+    }
 }
