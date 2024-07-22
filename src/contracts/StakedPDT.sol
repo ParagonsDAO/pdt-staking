@@ -759,18 +759,40 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
     /// ERC20 OVERRIDEN FUNCTIONS
     ////////////////////////////////////////////////////////////////////////////////
 
+    /**
+     * @dev stPDT is soulbound, but can be transferred from/to whitelisted contracts.
+     *
+     * Requirements
+     *
+     * - Only whitelisted contract can call this function
+     */
     function transfer(address to, uint256 value) public override returns (bool) {
-        if (!whitelistedContracts[to]) revert InvalidStakesTransfer();
+        if (!whitelistedContracts[msg.sender]) revert InvalidStakesTransfer();
+
+        _setUserWeightAtEpoch(to);
+        _adjustContractWeight();
 
         super._transfer(msg.sender, to, value);
         return true;
     }
 
+    /**
+     * @dev stPDT is soulbound, but can be transferred from/to whitelisted contracts.
+     *
+     * Requirements
+     *
+     * - Only whitelisted contract can call this function
+     * - `to` should be a whitelisted contract address
+     */
     function transferFrom(address from, address to, uint256 value) public override returns (bool) {
-        if (!whitelistedContracts[to]) revert InvalidStakesTransfer();
+        if (!whitelistedContracts[msg.sender] || !whitelistedContracts[to])
+            revert InvalidStakesTransfer();
+
+        _setUserWeightAtEpoch(from);
+        _adjustContractWeight();
 
         super._spendAllowance(from, msg.sender, value);
-        super._transfer(msg.sender, to, value);
+        super._transfer(from, to, value);
         return true;
     }
 }

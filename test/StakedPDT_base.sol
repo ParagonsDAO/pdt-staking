@@ -7,6 +7,7 @@ import {Test, console} from "forge-std/Test.sol";
 // Contract imports
 import {PDTStaking} from "../src/contracts/PDTStaking.sol";
 import {StakedPDT} from "../src/contracts/StakedPDT.sol";
+import {WrappedStakedPDT} from "../src/contracts/WrappedStakedPDT.sol";
 import {IStakedPDT} from "../src/interfaces/IStakedPDT.sol";
 
 // Mock imports
@@ -22,11 +23,13 @@ contract StakedPDTTestBase is Test, TestHelperOz5, IStakedPDT {
     uint32 bEid = 2;
 
     StakedPDT bStakedPDT;
+    WrappedStakedPDT bWstPDT;
     PDTOFTMock bPDTOFT;
     PRIMEMock bPRIME;
     PROMPTMock bPROMPT;
 
     address bStakedPDTAddress;
+    address bWstPDTAddress;
     address bPDTOFTAddress;
     address bPRIMEAddress;
     address bPROMPTAddress;
@@ -72,7 +75,10 @@ contract StakedPDTTestBase is Test, TestHelperOz5, IStakedPDT {
             msg.sender // DEFAULT_ADMIN_ROLE
         );
 
+        bWstPDT = new WrappedStakedPDT(address(bStakedPDT));
+
         bStakedPDTAddress = address(bStakedPDT);
+        bWstPDTAddress = address(bWstPDT);
         bPDTOFTAddress = address(bPDTOFT);
         bPRIMEAddress = address(bPRIME);
         bPROMPTAddress = address(bPROMPT);
@@ -86,6 +92,7 @@ contract StakedPDTTestBase is Test, TestHelperOz5, IStakedPDT {
 
         vm.startPrank(tokenManager);
         bStakedPDT.registerNewRewardToken(address(bPRIME));
+        bStakedPDT.updateWhitelistedContract(bWstPDTAddress, true);
         vm.stopPrank();
     }
 
