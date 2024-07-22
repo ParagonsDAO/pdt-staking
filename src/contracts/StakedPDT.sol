@@ -227,13 +227,9 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
 
         uint256 numOfRewardTokens = rewardTokenList.length;
 
-        for (uint256 itTokenIndex = 0; itTokenIndex < numOfRewardTokens; ) {
+        for (uint256 itTokenIndex = 0; itTokenIndex < numOfRewardTokens; ++itTokenIndex) {
             if (rewardTokenList[itTokenIndex] == newRewardToken) {
                 revert DuplicatedRewardToken(newRewardToken);
-            }
-
-            unchecked {
-                ++itTokenIndex;
             }
         }
 
@@ -289,7 +285,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
             uint256 _nTokenTypes = rewardTokenList.length;
             uint256 _nTokenTypesForNextEpoch;
 
-            for (uint256 itTokenIndex; itTokenIndex < _nTokenTypes; ) {
+            for (uint256 itTokenIndex; itTokenIndex < _nTokenTypes; ++itTokenIndex) {
                 address _token = rewardTokenList[itTokenIndex];
                 uint256 _rewardBalance = IERC20(_token).balanceOf(address(this));
                 uint256 _rewardsToDistribute = _rewardBalance - unclaimedRewards[_token];
@@ -298,10 +294,6 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
                     totalRewardsToDistribute[_token][_currentEpochId] = _rewardsToDistribute;
                     unclaimedRewards[_token] = _rewardBalance;
                     ++_nTokenTypesForNextEpoch;
-                }
-
-                unchecked {
-                    ++itTokenIndex;
                 }
             }
 
@@ -346,14 +338,10 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         uint256 _tokenListSize = rewardTokenList.length;
         uint8 isRegistered = 0;
 
-        for (uint256 itTokenIndex; itTokenIndex < _tokenListSize; ) {
+        for (uint256 itTokenIndex; itTokenIndex < _tokenListSize; ++itTokenIndex) {
             if (rewardTokenList[itTokenIndex] == rewardToken) {
                 isRegistered = 1;
                 break;
-            }
-
-            unchecked {
-                ++itTokenIndex;
             }
         }
 
@@ -487,7 +475,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         uint256[] memory _pendingRewards = new uint256[](_tokenListSize);
         uint256[] memory _expiredRewards = new uint256[](_tokenListSize);
 
-        for (uint256 itEpochId; itEpochId < _currentEpochId; ) {
+        for (uint256 itEpochId; itEpochId < _currentEpochId; ++itEpochId) {
             uint256 _contractWeightAtEpoch = contractWeightAtEpoch(itEpochId);
 
             if (!userClaimedEpoch[msg.sender][itEpochId] && _contractWeightAtEpoch > 0) {
@@ -496,7 +484,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
                 uint256 _userWeight = _userWeightAtEpoch[msg.sender][itEpochId];
 
                 if (_userWeight > 0) {
-                    for (uint256 itTokenIdex; itTokenIdex < _tokenListSize; ) {
+                    for (uint256 itTokenIdex; itTokenIdex < _tokenListSize; ++itTokenIdex) {
                         address _token = rewardTokenList[itTokenIdex];
                         uint256 _totalRewards = totalRewardsToDistribute[_token][itEpochId];
                         uint256 _totalRewardsClaimed = totalRewardsClaimed[_token][itEpochId];
@@ -517,22 +505,14 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
                                 totalRewardsClaimed[_token][itEpochId] += _epochRewards;
                             }
                         }
-
-                        unchecked {
-                            ++itTokenIdex;
-                        }
                     }
                 }
-            }
-
-            unchecked {
-                ++itEpochId;
             }
         }
 
         claimLeftOff[msg.sender] = _currentEpochId;
 
-        for (uint256 itTokenIndex; itTokenIndex < _tokenListSize; ) {
+        for (uint256 itTokenIndex; itTokenIndex < _tokenListSize; ++itTokenIndex) {
             address _token = rewardTokenList[itTokenIndex];
             uint256 _pendingRewardsByToken = _pendingRewards[itTokenIndex];
 
@@ -550,10 +530,6 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
                     _token,
                     _expiredRewards[itTokenIndex]
                 );
-            }
-
-            unchecked {
-                ++itTokenIndex;
             }
         }
     }
@@ -724,7 +700,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
             if (_amountStaked > 0) {
                 StakeDetails memory _stake = stakeDetails[user];
 
-                for (_epochLeftOff; _epochLeftOff < _currentEpochId; ) {
+                for (_epochLeftOff; _epochLeftOff < _currentEpochId; ++_epochLeftOff) {
                     Epoch memory _epoch = epoch[_epochLeftOff];
 
                     if (_stake.lastInteraction > _epoch.startTime) {
@@ -743,10 +719,6 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
                             _epoch.startTime,
                             _amountStaked
                         );
-                    }
-
-                    unchecked {
-                        ++_epochLeftOff;
                     }
                 }
             }
