@@ -196,18 +196,24 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      * Requirements:
      *
      * - Only TOKEN_MANAGER can update rewards expiry threshold
-     * - `newRewardsExpiryThreshold` shouldn't be zero
+     * - `rewardsExpiryThreshold` change shouldn't apply to epochs that have happened before the change
      *
      * Emits an {UpdateRewardDuration} event.
      */
     function updateRewardsExpiryThreshold(
         uint256 newRewardsExpiryThreshold
     ) external onlyRole(TOKEN_MANAGER) {
-        if (newRewardsExpiryThreshold == 0) revert InvalidRewardsExpiryThreshold();
+        uint256 _currentEpochId = currentEpochId;
 
-        rewardsExpiryThreshold = newRewardsExpiryThreshold;
-
-        emit UpdateRewardDuration(newRewardsExpiryThreshold);
+        if (
+            (_currentEpochId <= rewardsExpiryThreshold + 1) &&
+            (newRewardsExpiryThreshold >= _currentEpochId - 1)
+        ) {
+            rewardsExpiryThreshold = newRewardsExpiryThreshold;
+            emit UpdateRewardDuration(newRewardsExpiryThreshold);
+        } else {
+            revert InvalidRewardsExpiryThreshold();
+        }
     }
 
     /**
