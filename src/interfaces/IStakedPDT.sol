@@ -21,6 +21,18 @@ interface IStakedPDT {
     );
 
     /**
+     * @notice Emitted upon owner updates reward duration
+     * @param epochId The epoch Id that the rewardsExpiryThreshold is updated in
+     * @param previousRewardsExpiryThreshold The previous number of epochs in which rewards are claimable
+     * @param newRewardsExpiryThreshold The new number of epochs in which rewards are claimable
+     */
+    event UpdateRewardsExpiryThreshold(
+        uint256 indexed epochId,
+        uint256 indexed previousRewardsExpiryThreshold,
+        uint256 indexed newRewardsExpiryThreshold
+    );
+
+    /**
      * @notice Emitted if a reward token is registered
      * @param epochId Current epoch id
      * @param rewardToken Address of new reward token
@@ -97,12 +109,6 @@ interface IStakedPDT {
      * @param amount The amount of withdrawn reward tokens
      */
     event WithdrawRewardToken(address indexed rewardToken, uint256 indexed amount);
-
-    /**
-     * @notice Emitted upon owner updates reward duration
-     * @param newRewardDuration The time-to-live duration for rewards in seconds
-     */
-    event UpdateRewardDuration(uint256 indexed newRewardDuration);
 
     /// ERRORS ///
 

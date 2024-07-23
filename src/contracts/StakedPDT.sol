@@ -171,22 +171,27 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      *
      * - Only EPOCH_MANAGER can update epoch length
      * - `newEpochLength` shouldn't be zero
+     * - `newEpochLength` shouldn't be the same as `epochLength`
      * - Updated epoch end time should be greater than `contractLastInteraction`
      *
      * Emits an {UpdateEpochLength} event.
      */
     function updateEpochLength(uint256 newEpochLength) external onlyRole(EPOCH_MANAGER) {
-        uint256 newEndTime = epoch[currentEpochId].startTime + newEpochLength;
+        uint256 _currentEpochId = currentEpochId;
+        uint256 previousEpochLength = epochLength;
+        uint256 newEndTime = epoch[_currentEpochId].startTime + newEpochLength;
+
         require(
-            newEpochLength > 0 && newEndTime > contractLastInteraction,
+            newEpochLength != previousEpochLength &&
+                newEpochLength > 0 &&
+                newEndTime > contractLastInteraction,
             "Invalid new epoch length"
         );
 
-        uint256 previousEpochLength = epochLength;
         epochLength = newEpochLength;
-        epoch[currentEpochId].endTime = newEndTime;
+        epoch[_currentEpochId].endTime = newEndTime;
 
-        emit UpdateEpochLength(currentEpochId, previousEpochLength, newEpochLength);
+        emit UpdateEpochLength(_currentEpochId, previousEpochLength, newEpochLength);
     }
 
     /**
@@ -196,21 +201,29 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      * Requirements:
      *
      * - Only TOKEN_MANAGER can update rewards expiry threshold
+     * - `newRewardsExpiryThreshold` shouldn't be the same as `rewardsExpiryThreshold`
      * - `rewardsExpiryThreshold` change shouldn't apply to epochs that have happened before the change
      *
-     * Emits an {UpdateRewardDuration} event.
+     * Emits an {UpdateRewardsExpiryThreshold} event.
      */
     function updateRewardsExpiryThreshold(
         uint256 newRewardsExpiryThreshold
     ) external onlyRole(TOKEN_MANAGER) {
         uint256 _currentEpochId = currentEpochId;
+        uint256 _rewardsExpiryThreshold = rewardsExpiryThreshold;
 
         if (
-            (_currentEpochId <= rewardsExpiryThreshold + 1) &&
+            (_rewardsExpiryThreshold != newRewardsExpiryThreshold) &&
+            (_currentEpochId <= _rewardsExpiryThreshold + 1) &&
             (newRewardsExpiryThreshold >= _currentEpochId - 1)
         ) {
             rewardsExpiryThreshold = newRewardsExpiryThreshold;
-            emit UpdateRewardDuration(newRewardsExpiryThreshold);
+
+            emit UpdateRewardsExpiryThreshold(
+                _currentEpochId,
+                _rewardsExpiryThreshold,
+                newRewardsExpiryThreshold
+            );
         } else {
             revert InvalidRewardsExpiryThreshold();
         }
@@ -376,6 +389,8 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         address value,
         bool shouldWhitelist
     ) external onlyRole(TOKEN_MANAGER) {
+        require(whitelistedContracts[value] != shouldWhitelist, "Already whitelisted");
+
         whitelistedContracts[value] = shouldWhitelist;
 
         emit UpdateWhitelistedContract(value, shouldWhitelist);
@@ -387,7 +402,8 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
 
     /// @inheritdoc IStakedPDT
     function stake(address to, uint256 amount) external nonReentrant {
-        Epoch memory _epoch = epoch[currentEpochId];
+        uint256 _currentEpochId = currentEpochId;
+        Epoch memory _epoch = epoch[_currentEpochId];
 
         if (block.timestamp > _epoch.endTime) {
             revert OutOfEpoch();
@@ -423,12 +439,13 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         _mint(to, amount);
         IERC20(pdt).safeTransferFrom(msg.sender, address(this), amount);
 
-        emit Stake(to, amount, currentEpochId);
+        emit Stake(to, amount, _currentEpochId);
     }
 
     /// @inheritdoc IStakedPDT
     function unstake(address to, uint256 amount) external nonReentrant {
-        Epoch memory _epoch = epoch[currentEpochId];
+        uint256 _currentEpochId = currentEpochId;
+        Epoch memory _epoch = epoch[_currentEpochId];
         if (block.timestamp > _epoch.endTime) revert OutOfEpoch();
 
         uint256 _amountStaked = balanceOf(msg.sender);
@@ -460,7 +477,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         _burn(msg.sender, amount);
         IERC20(pdt).safeTransfer(to, amount);
 
-        emit Unstake(msg.sender, amount, currentEpochId);
+        emit Unstake(msg.sender, amount, _currentEpochId);
     }
 
     /// @inheritdoc IStakedPDT
