@@ -18,7 +18,7 @@ contract StakedPDTRegisterNewRewardTokenTest is StakedPDTTestBase {
     }
 
     function test_registerNewRewardToken_ManagerCanRegister() public {
-        vm.startPrank(tokenManager);
+        vm.startPrank(owner);
         // add PROMPT as a new active reward token
         bStakedPDT.registerNewRewardToken(bPROMPTAddress);
 

@@ -93,7 +93,7 @@ contract StakedPDTClaimTest is StakedPDTTestBase {
             abi.encodeWithSelector(
                 AccessControlUnauthorizedAccount.selector,
                 staker1,
-                TOKEN_MANAGER
+                DEFAULT_ADMIN_ROLE
             )
         );
         bStakedPDT.withdrawRewardTokens(bPRIMEAddress, _expiredRewardsAmount);
@@ -104,7 +104,7 @@ contract StakedPDTClaimTest is StakedPDTTestBase {
             abi.encodeWithSelector(
                 AccessControlUnauthorizedAccount.selector,
                 epochManager,
-                TOKEN_MANAGER
+                DEFAULT_ADMIN_ROLE
             )
         );
         bStakedPDT.withdrawRewardTokens(bPRIMEAddress, _expiredRewardsAmount);
@@ -128,7 +128,7 @@ contract StakedPDTClaimTest is StakedPDTTestBase {
         bPDTOFT.mint(staker4, initialBalance * 2);
 
         //update staker2 as whitelisted
-        vm.startPrank(tokenManager);
+        vm.startPrank(owner);
         bStakedPDT.updateWhitelistedContract(staker2, true);
         vm.stopPrank();
 

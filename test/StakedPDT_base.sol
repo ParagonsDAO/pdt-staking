@@ -36,11 +36,9 @@ contract StakedPDTTestBase is Test, TestHelperOz5, IStakedPDT {
 
     bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
     bytes32 public constant EPOCH_MANAGER = keccak256("EPOCH_MANAGER");
-    bytes32 public constant TOKEN_MANAGER = keccak256("TOKEN_MANAGER");
 
     address owner;
     address epochManager = address(0x888);
-    address tokenManager = address(0x999);
     address staker1 = address(0x111);
     address staker2 = address(0x222);
     address staker3 = address(0x333);
@@ -87,10 +85,9 @@ contract StakedPDTTestBase is Test, TestHelperOz5, IStakedPDT {
 
         vm.startPrank(owner);
         bStakedPDT.grantRole(EPOCH_MANAGER, epochManager);
-        bStakedPDT.grantRole(TOKEN_MANAGER, tokenManager);
         vm.stopPrank();
 
-        vm.startPrank(tokenManager);
+        vm.startPrank(owner);
         bStakedPDT.registerNewRewardToken(address(bPRIME));
         bStakedPDT.updateWhitelistedContract(bWstPDTAddress, true);
         vm.stopPrank();

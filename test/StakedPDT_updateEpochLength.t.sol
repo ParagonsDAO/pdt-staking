@@ -23,17 +23,6 @@ contract StakedPDTUpdateEpochLengthTest is StakedPDTTestBase {
         );
         bStakedPDT.updateEpochLength(newEpochLength);
         vm.stopPrank();
-
-        vm.startPrank(tokenManager);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AccessControlUnauthorizedAccount.selector,
-                tokenManager,
-                EPOCH_MANAGER
-            )
-        );
-        bStakedPDT.updateEpochLength(newEpochLength);
-        vm.stopPrank();
     }
 
     function testFuzz_updateEpochLength_OwnerUpdateEpochLength(uint128 _newEpochLength) public {

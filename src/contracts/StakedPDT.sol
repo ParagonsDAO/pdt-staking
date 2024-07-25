@@ -25,7 +25,6 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
     /// NEW ROLES
 
     bytes32 public constant EPOCH_MANAGER = keccak256("EPOCH_MANAGER");
-    bytes32 public constant TOKEN_MANAGER = keccak256("TOKEN_MANAGER");
 
     /// Epoch Configuration
 
@@ -151,7 +150,6 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
 
         _grantRole(DEFAULT_ADMIN_ROLE, initialOwner);
         _grantRole(EPOCH_MANAGER, initialOwner);
-        _grantRole(TOKEN_MANAGER, initialOwner);
 
         epochLength = initialEpochLength;
         epoch[0].endTime = block.timestamp + firstEpochStartIn;
@@ -200,7 +198,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      *
      * Requirements:
      *
-     * - Only TOKEN_MANAGER can update rewards expiry threshold
+     * - Only DEFAULT_ADMIN_ROLE can update rewards expiry threshold
      * - `newRewardsExpiryThreshold` shouldn't be the same as `rewardsExpiryThreshold`
      * - `rewardsExpiryThreshold` change shouldn't apply to epochs that have happened before the change
      *
@@ -208,7 +206,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      */
     function updateRewardsExpiryThreshold(
         uint256 newRewardsExpiryThreshold
-    ) external onlyRole(TOKEN_MANAGER) {
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 _currentEpochId = currentEpochId;
         uint256 _rewardsExpiryThreshold = rewardsExpiryThreshold;
 
@@ -235,13 +233,13 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      *
      * Requirements:
      *
-     * - Only TOKEN_MANAGER can register new reward token
+     * - Only DEFAULT_ADMIN_ROLE can register new reward token
      * - `newRewardToken` shouldn't be a zero address
      * - `newRewardToken` shouldn't be already registered
      *
      * Emits a {RegisterNewRewardToken} event.
      */
-    function registerNewRewardToken(address newRewardToken) external onlyRole(TOKEN_MANAGER) {
+    function registerNewRewardToken(address newRewardToken) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(newRewardToken != address(0) && newRewardToken != pdt, "Invalid reward token");
 
         uint256 numOfRewardTokens = rewardTokenList.length;
@@ -264,11 +262,11 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      *
      * Requirements:
      *
-     * - Only TOKEN_MANAGER can unregister reward token
+     * - Only DEFAULT_ADMIN_ROLE can unregister reward token
      *
      * Emits an {UnregisterRewardToken} event.
      */
-    function unregisterRewardToken(uint256 index) external onlyRole(TOKEN_MANAGER) {
+    function unregisterRewardToken(uint256 index) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(index < rewardTokenList.length, "Index out of bounds");
 
         address rewardToken = rewardTokenList[index];
@@ -337,7 +335,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      *
      * Requirements:
      *
-     * - Only TOKEN_MANAGER can withdraw reward tokens
+     * - Only DEFAULT_ADMIN_ROLE can withdraw reward tokens
      * - `rewardToken` should be already registered
      * - `amount` shouldn't be zero
      *
@@ -346,7 +344,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
     function withdrawRewardTokens(
         address rewardToken,
         uint256 amount
-    ) external onlyRole(TOKEN_MANAGER) {
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (rewardToken == address(0)) {
             revert InvalidRewardToken();
         }
@@ -381,14 +379,14 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      *
      * Requirements:
      *
-     * - Only TOKEN_MANAGER can update contract whitelist
+     * - Only DEFAULT_ADMIN_ROLE can update contract whitelist
      *
      * Emits {UpdateWhitelistedContract} event.
      */
     function updateWhitelistedContract(
         address value,
         bool shouldWhitelist
-    ) external onlyRole(TOKEN_MANAGER) {
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(whitelistedContracts[value] != shouldWhitelist, "Already whitelisted");
 
         whitelistedContracts[value] = shouldWhitelist;

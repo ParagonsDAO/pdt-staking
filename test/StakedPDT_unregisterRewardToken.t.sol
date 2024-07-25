@@ -6,8 +6,8 @@ import {StakedPDTTestBase} from "./StakedPDT_base.sol";
 
 contract StakedPDTUnregisterRewardTokenTest is StakedPDTTestBase {
     function test_unregisterRewardToken() public {
-        // only TOKEN_MANAGER role should unregister reward token
-        vm.startPrank(tokenManager);
+        // only DEFAULT_ADMIN_ROLE role should unregister reward token
+        vm.startPrank(owner);
         bStakedPDT.registerNewRewardToken(bPROMPTAddress);
         vm.stopPrank();
 
@@ -16,7 +16,7 @@ contract StakedPDTUnregisterRewardTokenTest is StakedPDTTestBase {
             abi.encodeWithSelector(
                 AccessControlUnauthorizedAccount.selector,
                 epochManager,
-                TOKEN_MANAGER
+                DEFAULT_ADMIN_ROLE
             )
         );
         bStakedPDT.unregisterRewardToken(1);
@@ -27,14 +27,14 @@ contract StakedPDTUnregisterRewardTokenTest is StakedPDTTestBase {
             abi.encodeWithSelector(
                 AccessControlUnauthorizedAccount.selector,
                 staker1,
-                TOKEN_MANAGER
+                DEFAULT_ADMIN_ROLE
             )
         );
         bStakedPDT.unregisterRewardToken(1);
         vm.stopPrank();
 
         // should revert if unregistering token index is out of range
-        vm.startPrank(tokenManager);
+        vm.startPrank(owner);
         vm.expectRevert("Index out of bounds");
         bStakedPDT.unregisterRewardToken(2);
         vm.stopPrank();
@@ -44,7 +44,7 @@ contract StakedPDTUnregisterRewardTokenTest is StakedPDTTestBase {
         bStakedPDT.rewardTokenList(2);
         assertEq(bStakedPDT.rewardTokenList(1), bPROMPTAddress);
 
-        vm.startPrank(tokenManager);
+        vm.startPrank(owner);
         // should emit {UnregisterRewardToken} event
         vm.expectEmit();
         emit UnregisterRewardToken(bStakedPDT.currentEpochId(), bPROMPTAddress);
@@ -58,7 +58,7 @@ contract StakedPDTUnregisterRewardTokenTest is StakedPDTTestBase {
 
     // should be able to remove any reward token
     function test_unregisterRewardToken_RemoveAnyRewardToken() public {
-        vm.startPrank(tokenManager);
+        vm.startPrank(owner);
 
         bStakedPDT.registerNewRewardToken(bPROMPTAddress);
         bStakedPDT.unregisterRewardToken(0);

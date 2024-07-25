@@ -366,7 +366,7 @@ contract StakedPDTStakeUnstakeClaimTest is StakedPDTTestBase {
         vm.stopPrank();
 
         // register PROMPT token as a new reward token
-        vm.startPrank(tokenManager);
+        vm.startPrank(owner);
         bStakedPDT.registerNewRewardToken(bPROMPTAddress);
         vm.stopPrank();
 
