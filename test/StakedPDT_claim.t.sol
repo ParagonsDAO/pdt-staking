@@ -119,28 +119,26 @@ contract StakedPDTClaimTest is StakedPDTTestBase {
         assertEq(bStakedPDT.pendingRewards(bPRIMEAddress), 0);
     }
 
-    function test_transferTokenAndClaim() public {
+    function test_stakeAtFirst_transferTokenAtTheEnd_claim() public {
+        /// EPOCH 0
+
         uint256 POOL_SIZE = 1e18;
         uint256 initialBalance = 1e18;
         bPDTOFT.mint(staker1, initialBalance * 2);
-        bPDTOFT.mint(staker2, initialBalance * 2);
         bPDTOFT.mint(staker3, initialBalance * 2);
         bPDTOFT.mint(staker4, initialBalance * 2);
-
-        //update staker2 as whitelisted
-        vm.startPrank(owner);
-        bStakedPDT.updateWhitelistedContract(staker2, true);
-        vm.stopPrank();
 
         //advance to epoch1
         _creditPRIMERewardPool(POOL_SIZE);
         _moveToNextEpoch(0);
 
+        /// EPOCH 1
+
         //advance to epoch2
         _creditPRIMERewardPool(POOL_SIZE);
         _moveToNextEpoch(1);
 
-        console.log("Epoch 2");
+        /// EPOCH 2
 
         //staker1, staker3 and staker4 stake at epoch2 start
         (uint256 epochStartTime, uint256 epochEndTime, ) = bStakedPDT.epoch(2);
@@ -166,6 +164,95 @@ contract StakedPDTClaimTest is StakedPDTTestBase {
         vm.warp(epochEndTime - 1 days);
 
         vm.startPrank(staker1);
+        bStakedPDT.approve(bWstPDTAddress, initialBalance);
+        bWstPDT.wrap(initialBalance);
+        bWstPDT.transfer(staker2, initialBalance);
+        vm.stopPrank();
+
+        vm.startPrank(staker2);
+        bWstPDT.unwrap(initialBalance);
+        vm.stopPrank();
+
+        console.log("Contract weight:", bStakedPDT.contractWeight());
+        console.log("Staker1 weight:", bStakedPDT.userTotalWeight(staker1));
+        console.log("Staker2 weight:", bStakedPDT.userTotalWeight(staker2));
+        console.log("Staker3 weight:", bStakedPDT.userTotalWeight(staker3));
+        console.log("Staker4 weight:", bStakedPDT.userTotalWeight(staker4));
+
+        //advance to epoch3
+        _creditPRIMERewardPool(POOL_SIZE);
+        _moveToNextEpoch(2);
+
+        /// EPOCH 3
+
+        //all stakers claim
+        vm.startPrank(staker1);
+        bStakedPDT.claim(staker1);
+        vm.stopPrank();
+
+        vm.startPrank(staker2);
+        bStakedPDT.claim(staker2);
+        vm.stopPrank();
+
+        vm.startPrank(staker3);
+        bStakedPDT.claim(staker3);
+        vm.stopPrank();
+
+        vm.startPrank(staker4);
+        bStakedPDT.claim(staker4);
+        vm.stopPrank();
+
+        //logs
+        console.log("Staker1 PRIME Reward Tokens:", bPRIME.balanceOf(staker1));
+        console.log("Staker2 PRIME Reward Tokens:", bPRIME.balanceOf(staker2));
+        console.log("Staker3 PRIME Reward Tokens:", bPRIME.balanceOf(staker3));
+        console.log("Staker4 PRIME Reward Tokens:", bPRIME.balanceOf(staker4));
+    }
+
+    function test_stakeAndTransferTokenAtTheEnd_claim() public {
+        /// EPOCH 0
+
+        uint256 POOL_SIZE = 1e18;
+        uint256 initialBalance = 1e18;
+        bPDTOFT.mint(staker1, initialBalance * 2);
+        bPDTOFT.mint(staker3, initialBalance * 2);
+        bPDTOFT.mint(staker4, initialBalance * 2);
+
+        //advance to epoch1
+        _creditPRIMERewardPool(POOL_SIZE);
+        _moveToNextEpoch(0);
+
+        /// EPOCH 1
+
+        //advance to epoch2
+        _creditPRIMERewardPool(POOL_SIZE);
+        _moveToNextEpoch(1);
+
+        /// EPOCH 2
+
+        //staker3 and staker4 stake at epoch2 start
+        (uint256 epochStartTime, uint256 epochEndTime, ) = bStakedPDT.epoch(2);
+        vm.warp(epochStartTime);
+
+        vm.startPrank(staker3);
+        bPDTOFT.approve(bStakedPDTAddress, initialBalance * 2);
+        bStakedPDT.stake(staker3, initialBalance);
+        vm.stopPrank();
+
+        vm.startPrank(staker4);
+        bPDTOFT.approve(bStakedPDTAddress, initialBalance * 2);
+        bStakedPDT.stake(staker4, initialBalance);
+        vm.stopPrank();
+
+        //staker1 stakes and transfers StakedPDT to staker2 at the end of epoch 2
+        //only whitelisted contract can call transfer
+        vm.warp(epochEndTime - 1 days);
+        vm.startPrank(staker1);
+        bPDTOFT.approve(bStakedPDTAddress, initialBalance * 2);
+        bStakedPDT.stake(staker1, initialBalance);
+        vm.stopPrank();
+
+        vm.startPrank(staker1);
         vm.expectRevert(InvalidStakesTransfer.selector);
         bStakedPDT.transfer(staker2, initialBalance);
         bStakedPDT.approve(bWstPDTAddress, initialBalance);
@@ -187,7 +274,7 @@ contract StakedPDTClaimTest is StakedPDTTestBase {
         _creditPRIMERewardPool(POOL_SIZE);
         _moveToNextEpoch(2);
 
-        console.log("Epoch 3");
+        /// EPOCH 3
 
         //all stakers claim
         vm.startPrank(staker1);
@@ -271,31 +358,15 @@ contract StakedPDTClaimTest is StakedPDTTestBase {
         (, uint256 epoch4EndTime, ) = bStakedPDT.epoch(4);
         vm.warp(epoch4EndTime - 1 days);
 
-        console.log("\nEpoch 4");
-        console.log("Before wrapping");
-        console.log("Contract weight: ", bStakedPDT.contractWeight());
-        console.log("Staker1 weight: ", bStakedPDT.userTotalWeight(staker1));
-        console.log("Staker2 weight: ", bStakedPDT.userTotalWeight(staker2));
-
         vm.startPrank(staker1);
         bStakedPDT.approve(bWstPDTAddress, wrapAmount);
         bWstPDT.wrap(wrapAmount);
         bWstPDT.transfer(staker2, wrapAmount);
         vm.stopPrank();
 
-        console.log("After wrapping");
-        console.log("Contract weight: ", bStakedPDT.contractWeight());
-        console.log("Staker1 weight: ", bStakedPDT.userTotalWeight(staker1));
-        console.log("Staker2 weight: ", bStakedPDT.userTotalWeight(staker2));
-
         vm.startPrank(staker2);
         bWstPDT.unwrap(wrapAmount);
         vm.stopPrank();
-
-        console.log("After unwrapping");
-        console.log("Contract weight: ", bStakedPDT.contractWeight());
-        console.log("Staker1 weight: ", bStakedPDT.userTotalWeight(staker1));
-        console.log("Staker2 weight: ", bStakedPDT.userTotalWeight(staker2));
 
         _creditPRIMERewardPool(POOL_SIZE);
         _moveToNextEpoch(4);
@@ -310,7 +381,6 @@ contract StakedPDTClaimTest is StakedPDTTestBase {
         (, uint256 epoch6EndTime, ) = bStakedPDT.epoch(6);
         vm.warp(epoch6EndTime - 1 days);
 
-        console.log("\nEpoch 6");
         console.log("Before claiming");
 
         uint256 e6_s1_claimableAmount = 0;

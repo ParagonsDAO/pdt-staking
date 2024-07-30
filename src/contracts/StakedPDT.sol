@@ -199,7 +199,6 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      * Requirements:
      *
      * - Only DEFAULT_ADMIN_ROLE can update rewards expiry threshold
-     * - `newRewardsExpiryThreshold` shouldn't be the same as `rewardsExpiryThreshold`
      * - `rewardsExpiryThreshold` change shouldn't apply to epochs that have happened before the change
      *
      * Emits an {UpdateRewardsExpiryThreshold} event.
@@ -208,18 +207,18 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         uint256 newRewardsExpiryThreshold
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 _currentEpochId = currentEpochId;
-        uint256 _rewardsExpiryThreshold = rewardsExpiryThreshold;
+        uint256 _oldRewardsExpiryThreshold = rewardsExpiryThreshold;
 
         if (
-            (_rewardsExpiryThreshold != newRewardsExpiryThreshold) &&
-            (_currentEpochId <= _rewardsExpiryThreshold + 1) &&
-            (newRewardsExpiryThreshold >= _currentEpochId - 1)
+            (_oldRewardsExpiryThreshold != newRewardsExpiryThreshold) &&
+            (_oldRewardsExpiryThreshold >= _currentEpochId) &&
+            (newRewardsExpiryThreshold >= _currentEpochId)
         ) {
             rewardsExpiryThreshold = newRewardsExpiryThreshold;
 
             emit UpdateRewardsExpiryThreshold(
                 _currentEpochId,
-                _rewardsExpiryThreshold,
+                _oldRewardsExpiryThreshold,
                 newRewardsExpiryThreshold
             );
         } else {
@@ -400,12 +399,6 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
 
     /// @inheritdoc IStakedPDT
     function stake(address to, uint256 amount) external nonReentrant {
-        uint256 _currentEpochId = currentEpochId;
-        Epoch memory _epoch = epoch[_currentEpochId];
-
-        if (block.timestamp > _epoch.endTime) {
-            revert OutOfEpoch();
-        }
         if (amount == 0) {
             revert InvalidStakeAmount();
         }
@@ -413,69 +406,28 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         _setUserWeightAtEpoch(to);
         _adjustContractWeight();
 
-        StakeDetails memory _stake = stakeDetails[to];
-        uint256 _amountStaked = balanceOf(to);
-
-        if (_stake.lastInteraction > _epoch.startTime) {
-            uint256 _additionalWeight = _weightIncreaseSinceInteraction(
-                block.timestamp,
-                _stake.lastInteraction,
-                _amountStaked
-            );
-            _stake.weightAtLastInteraction += _additionalWeight;
-        } else {
-            _stake.weightAtLastInteraction = _weightIncreaseSinceInteraction(
-                block.timestamp,
-                _epoch.startTime,
-                _amountStaked
-            );
-        }
-
-        _stake.lastInteraction = block.timestamp;
-        stakeDetails[to] = _stake;
+        _updateStakeDetails(to);
 
         _mint(to, amount);
         IERC20(pdt).safeTransferFrom(msg.sender, address(this), amount);
 
-        emit Stake(to, amount, _currentEpochId);
+        emit Stake(to, amount, currentEpochId);
     }
 
     /// @inheritdoc IStakedPDT
     function unstake(address to, uint256 amount) external nonReentrant {
-        uint256 _currentEpochId = currentEpochId;
-        Epoch memory _epoch = epoch[_currentEpochId];
-        if (block.timestamp > _epoch.endTime) revert OutOfEpoch();
-
         uint256 _amountStaked = balanceOf(msg.sender);
         if (amount == 0 || amount > _amountStaked) revert InvalidUnstakeAmount();
 
         _setUserWeightAtEpoch(msg.sender);
         _adjustContractWeight();
 
-        StakeDetails memory _stake = stakeDetails[msg.sender];
-
-        if (_stake.lastInteraction > _epoch.startTime) {
-            uint256 _additionalWeight = _weightIncreaseSinceInteraction(
-                block.timestamp,
-                _stake.lastInteraction,
-                _amountStaked
-            );
-            _stake.weightAtLastInteraction += _additionalWeight;
-        } else {
-            _stake.weightAtLastInteraction = _weightIncreaseSinceInteraction(
-                block.timestamp,
-                _epoch.startTime,
-                _amountStaked
-            );
-        }
-
-        _stake.lastInteraction = block.timestamp;
-        stakeDetails[msg.sender] = _stake;
+        _updateStakeDetails(msg.sender);
 
         _burn(msg.sender, amount);
         IERC20(pdt).safeTransfer(to, amount);
 
-        emit Unstake(msg.sender, amount, _currentEpochId);
+        emit Unstake(msg.sender, amount, currentEpochId);
     }
 
     /// @inheritdoc IStakedPDT
@@ -612,6 +564,7 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
         } else {
             Epoch memory _epoch = epoch[epochId];
             StakeDetails memory _stake = stakeDetails[user];
+
             if (_stake.lastInteraction > _epoch.startTime) {
                 userWeight_ =
                     _stake.weightAtLastInteraction +
@@ -718,34 +671,66 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
 
         if (_epochLeftOff != _currentEpochId) {
             uint256 _amountStaked = balanceOf(user);
-            if (_amountStaked > 0) {
-                StakeDetails memory _stake = stakeDetails[user];
+            StakeDetails memory _stake = stakeDetails[user];
 
-                for (_epochLeftOff; _epochLeftOff < _currentEpochId; ++_epochLeftOff) {
-                    Epoch memory _epoch = epoch[_epochLeftOff];
+            for (_epochLeftOff; _epochLeftOff < _currentEpochId; ++_epochLeftOff) {
+                Epoch memory _epoch = epoch[_epochLeftOff];
 
-                    if (_stake.lastInteraction > _epoch.startTime) {
-                        uint256 _additionalWeight = _weightIncreaseSinceInteraction(
-                            _epoch.endTime,
-                            _stake.lastInteraction,
-                            _amountStaked
-                        );
+                if (_stake.lastInteraction > _epoch.startTime) {
+                    uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+                        _epoch.endTime,
+                        _stake.lastInteraction,
+                        _amountStaked
+                    );
 
-                        _userWeightAtEpoch[user][_epochLeftOff] =
-                            _stake.weightAtLastInteraction +
-                            _additionalWeight;
-                    } else {
-                        _userWeightAtEpoch[user][_epochLeftOff] = _weightIncreaseSinceInteraction(
-                            _epoch.endTime,
-                            _epoch.startTime,
-                            _amountStaked
-                        );
-                    }
+                    _userWeightAtEpoch[user][_epochLeftOff] =
+                        _stake.weightAtLastInteraction +
+                        _additionalWeight;
+                } else {
+                    _userWeightAtEpoch[user][_epochLeftOff] = _weightIncreaseSinceInteraction(
+                        _epoch.endTime,
+                        _epoch.startTime,
+                        _amountStaked
+                    );
                 }
             }
 
             epochLeftOff[user] = _currentEpochId;
         }
+    }
+
+    /**
+     * @notice Update `stakeDetails` when tokens are staked/unstaked.
+     * @param staker The address of staker/unstaker
+     */
+    function _updateStakeDetails(address staker) internal {
+        uint256 _timestamp = block.timestamp;
+        Epoch memory _epoch = epoch[currentEpochId];
+
+        if (_timestamp > _epoch.endTime) {
+            revert OutOfEpoch();
+        }
+
+        uint256 _amountStaked = balanceOf(staker);
+        StakeDetails memory _stake = stakeDetails[staker];
+
+        if (_stake.lastInteraction > _epoch.startTime) {
+            uint256 _additionalWeight = _weightIncreaseSinceInteraction(
+                _timestamp,
+                _stake.lastInteraction,
+                _amountStaked
+            );
+            _stake.weightAtLastInteraction += _additionalWeight;
+        } else {
+            _stake.weightAtLastInteraction = _weightIncreaseSinceInteraction(
+                _timestamp,
+                _epoch.startTime,
+                _amountStaked
+            );
+        }
+
+        _stake.lastInteraction = _timestamp;
+        stakeDetails[staker] = _stake;
     }
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -758,14 +743,18 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      * Requirements
      *
      * - Only whitelisted contract can call this function
+     *
+     * Emits a {Transfer} event.
      */
     function transfer(address to, uint256 value) public override returns (bool) {
         if (!whitelistedContracts[msg.sender]) revert InvalidStakesTransfer();
 
         _setUserWeightAtEpoch(to);
         _adjustContractWeight();
+        _updateStakeDetails(to);
 
         super._transfer(msg.sender, to, value);
+        emit Transfer(msg.sender, to, value);
         return true;
     }
 
@@ -776,6 +765,8 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
      *
      * - Only whitelisted contract can call this function
      * - `to` should be a whitelisted contract address
+     *
+     * Emits a {Transfer} event.
      */
     function transferFrom(address from, address to, uint256 value) public override returns (bool) {
         if (!whitelistedContracts[msg.sender] || !whitelistedContracts[to])
@@ -783,9 +774,11 @@ contract StakedPDT is ERC20, ReentrancyGuard, AccessControlEnumerable, IStakedPD
 
         _setUserWeightAtEpoch(from);
         _adjustContractWeight();
+        _updateStakeDetails(from);
 
         super._spendAllowance(from, msg.sender, value);
         super._transfer(from, to, value);
+        emit Transfer(from, to, value);
         return true;
     }
 }
