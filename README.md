@@ -100,8 +100,8 @@ forge create --rpc-url "<your_rpc_url>" \
   src/contracts/PDTStakingV2.sol:PDTStakingV2
 ```
 
-## Immunefi Bug Bounty
+## Hashlock Bug Bounty
 
-ParagonsDAO hosts a bug bounty on Immunefi at this address https://immunefi.com/bounty/paragonsdao/. 
+ParagonsDAO hosts a bug bounty on Hashlock at this address https://hashlock.com/bug-bounty/paragonsdao. 
 
-If you've found a vulnerability on this contract, it must be submitted through Immunefi's platform. See the bounty page for more details on accepted vulnerabilities, payout amounts, and rules of participation.
+If you've found a vulnerability on this contract, it must be submitted through Hashlock. See the bounty page for more details on accepted vulnerabilities, payout amounts, and rules of participation.
